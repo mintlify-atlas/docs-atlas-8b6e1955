@@ -1,0 +1,154 @@
+---
+title: "Incident notes: GET and POST /<id>/notes/"
+description: "List and create internal analyst notes on incidents in Asistente Web IA — IncidentNote fields, analyst-only permissions, and curl request examples."
+---
+
+The **Asistente Web IA - Gestión de Incidentes** notes endpoints allow analysts and administrators to attach structured internal notes to any incident. Notes are stored as `IncidentNote` records and are returned as a nested `notes` array on every incident object. They complement the `analyst_notes` text field and provide a full audit trail of analyst activity on an incident.
+
+<Note>
+  Only users with the `analyst` or `admin` role can access these endpoints. Employees receive a `403 Forbidden` response.
+</Note>
+
+---
+
+## GET /api/incidents/\<id\>/notes/
+
+Returns all notes attached to the specified incident, ordered most recent first.
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The ID of the incident whose notes you want to retrieve.
+</ParamField>
+
+### Response
+
+Returns an array of `IncidentNote` objects.
+
+<ResponseField name="id" type="integer">
+  Auto-incremented note ID.
+</ResponseField>
+
+<ResponseField name="incident" type="integer">
+  ID of the parent incident.
+</ResponseField>
+
+<ResponseField name="author" type="integer">
+  ID of the user who created the note.
+</ResponseField>
+
+<ResponseField name="author_username" type="string">
+  Username of the note author.
+</ResponseField>
+
+<ResponseField name="content" type="string">
+  Full text content of the note.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp when the note was created.
+</ResponseField>
+
+```bash curl
+curl --request GET \
+  --url https://your-backend.onrender.com/api/incidents/42/notes/ \
+  --header 'Authorization: Token YOUR_TOKEN'
+```
+
+**Example response**
+
+```json
+[
+  {
+    "id": 7,
+    "incident": 42,
+    "author": 3,
+    "author_username": "analyst_maria",
+    "content": "[Cambio de Estado] Confirmed malicious domain, blocking at perimeter firewall.",
+    "created_at": "2025-04-10T14:32:00Z"
+  },
+  {
+    "id": 4,
+    "incident": 42,
+    "author": 3,
+    "author_username": "analyst_maria",
+    "content": "Initial triage complete. Domain registered 2 days ago, no legitimate business found.",
+    "created_at": "2025-04-10T13:15:00Z"
+  }
+]
+```
+
+---
+
+## POST /api/incidents/\<id\>/notes/
+
+Creates a new internal note on the specified incident. The authenticated user is set as the note author automatically.
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The ID of the incident to annotate.
+</ParamField>
+
+### Request body
+
+<ParamField body="content" type="string" required>
+  The text content of the note. Cannot be empty.
+</ParamField>
+
+### Response
+
+Returns the created `IncidentNote` object with HTTP `201 Created`.
+
+<ResponseField name="id" type="integer">
+  Auto-incremented note ID.
+</ResponseField>
+
+<ResponseField name="incident" type="integer">
+  ID of the parent incident.
+</ResponseField>
+
+<ResponseField name="author" type="integer">
+  ID of the authenticated user who created the note.
+</ResponseField>
+
+<ResponseField name="author_username" type="string">
+  Username of the authenticated user.
+</ResponseField>
+
+<ResponseField name="content" type="string">
+  The note text as submitted.
+</ResponseField>
+
+<ResponseField name="created_at" type="string">
+  ISO 8601 timestamp set at creation.
+</ResponseField>
+
+```bash curl
+curl --request POST \
+  --url https://your-backend.onrender.com/api/incidents/42/notes/ \
+  --header 'Authorization: Token YOUR_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{"content": "Hash matches known ransomware family. Escalating to CISO."}'
+```
+
+**Example response**
+
+```json
+{
+  "id": 8,
+  "incident": 42,
+  "author": 3,
+  "author_username": "analyst_maria",
+  "content": "Hash matches known ransomware family. Escalating to CISO.",
+  "created_at": "2025-04-10T15:00:00Z"
+}
+```
+
+**Error — empty content**
+
+```json
+{
+  "error": "Contenido requerido"
+}
+```

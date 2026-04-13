@@ -1,0 +1,136 @@
+---
+title: 'Google Gemini AI explanations and image analysis'
+description: 'How Gemini 2.5 Flash generates threat explanations and detects phishing in images for Asistente Web IA, with graceful fallback when the API is unavailable.'
+keywords: ['gemini', 'AI assistant', 'threat explanation', 'image analysis', 'OCR', 'phishing detection', 'gemini-2.5-flash', 'fallback']
+---
+
+Asistente Web IA - Gestión de Incidentes integrates Google Gemini 2.5 Flash at two points in the analysis pipeline: generating plain-language explanations of scan results for every file and URL submission, and performing visual phishing detection on uploaded images. Both functions degrade gracefully when the Gemini API is unavailable.
+
+## Two Gemini functions
+
+The `GeminiService` class provides two distinct capabilities:
+
+<CardGroup cols={2}>
+  <Card title="explain_threat()" icon="message-square">
+    Converts raw engine detection counts into a professional cybersecurity explanation and an actionable recommendation, in Spanish.
+  </Card>
+  <Card title="analyze_image()" icon="scan">
+    Performs OCR on JPEG and PNG images to detect phishing content, extract URLs, and assign a risk level using Gemini Vision.
+  </Card>
+</CardGroup>
+
+## explain_threat()
+
+After every file or URL analysis, `explain_threat()` is called with the aggregated detection counts. It sends a structured prompt to `gemini-2.5-flash` and returns a two-field JSON object.
+
+### What the prompt includes
+
+The prompt instructs Gemini to act as a professional cybersecurity analyst and provides:
+
+- The resource name (filename or URL)
+- The resource type (`archivo` or `enlace web`)
+- The number of positive detections and total engines checked
+- The calculated risk level and percentage
+
+### Response format
+
+Gemini is instructed to return only a valid JSON object with no markdown wrappers:
+
+```json
+{
+  "explicacion": "Professional analysis in 2-3 sentences.",
+  "recomendacion": "Specific recommended action."
+}
+```
+
+The response is validated: if the `explicacion` field is shorter than 30 characters, the system falls back to a rule-based explanation instead.
+
+### Built-in input validation and whitelisting
+
+The prompt contains explicit instructions that Gemini must follow before generating any analysis:
+
+- **Input validation** — If the resource name is not a recognizable URL, domain, IP address, or filename (for example, a greeting like `hola` or a random string like `asdf`), Gemini is instructed to state that the input is invalid rather than inventing threats.
+- **Domain whitelisting** — If the domain matches a known legitimate site (`google.com`, `facebook.com`, `microsoft.com`, `live.com`, `amazon.com`, `paypal.com`, `apple.com`), Gemini confirms it as safe regardless of minor false positives from other engines.
+- **Encrypted archive warning** — If the resource is a `.zip`, `.rar`, or `.7z` file with few or zero detections, the prompt instructs Gemini to warn that the archive may contain password-protected malware.
+
+### Risk levels used in explain_threat()
+
+| Positives count | Internal level | Typical explanation |
+|---|---|---|
+| > 50 | CRITICO | Highly dangerous, identified by many security firms, capable of data theft or system damage |
+| > 15 | ALTO | Marked dangerous by multiple engines, very likely malicious |
+| > 5 | MEDIO | Raised alerts in several systems, potentially risky |
+| > 0 | BAJO | Suspicious characteristics flagged by a minority of engines |
+| 0 | SEGURO | Reviewed by all engines with no threats found |
+
+### API configuration
+
+```python
+url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+payload = {
+    "contents": [{"parts": [{"text": prompt}]}],
+    "generationConfig": {
+        "temperature": 0.9,
+        "maxOutputTokens": 2048
+    }
+}
+```
+
+The request has a 30-second timeout. Non-200 responses trigger the fallback immediately.
+
+## analyze_image()
+
+When a user submits a JPEG or PNG image, `analyze_image()` encodes the file as base64 and sends it to `gemini-2.5-flash` alongside a structured analysis prompt.
+
+### What Gemini Vision looks for
+
+The prompt instructs Gemini to inspect the image for:
+
+- Fake login pages impersonating banks, email providers, or social networks
+- Suspicious WhatsApp or email screenshots with phishing language
+- Pop-up alerts falsely claiming virus detection
+- Urgency cues, spelling errors, and unsolicited attachments
+- Any URLs, domains, or links visible in the image (OCR extraction)
+
+### Image analysis response format
+
+```json
+{
+  "riesgo": "CRÍTICO | ALTO | MEDIO | BAJO | SEGURO",
+  "explicacion": "Professional analysis of the image content.",
+  "recomendacion": "Immediate recommended action.",
+  "urls_extraidas": ["extracted-domain.com", "http://suspicious.net/login"]
+}
+```
+
+### Risk escalation with extracted URLs
+
+If `urls_extraidas` contains one or more URLs, those URLs are automatically passed through the full URL analysis pipeline (VirusTotal + MetaDefender + Google Safe Browsing). The final risk level assigned to the incident is the **higher** of the Gemini image-level risk and the URL pipeline risk.
+
+### API configuration for images
+
+```python
+"generationConfig": {
+    "temperature": 0.4,
+    "maxOutputTokens": 2048
+}
+```
+
+A lower temperature (0.4 vs 0.9 for text) is used for image analysis to keep the OCR and classification output more deterministic. The request timeout is 45 seconds to accommodate the larger payload.
+
+## Fallback behavior
+
+When the Gemini API is unavailable (no API key configured, non-200 response, or a JSON parse failure), the `_fallback_explanation()` method generates a rule-based response using only the positives count:
+
+<AccordionGroup>
+  <Accordion title="Fallback logic for explain_threat()">
+    The fallback generates the `explicacion` and `recomendacion` fields using a simple threshold check on `positives`. It references either "este archivo" or "este enlace web" depending on `incident_type`, and recommends blocking, caution, or safe use accordingly. The response structure is identical to the Gemini output so the frontend requires no special handling.
+  </Accordion>
+  <Accordion title="Fallback for analyze_image()">
+    If `analyze_image()` fails, the system returns a hardcoded response with `riesgo: "MEDIO"` and a recommendation to review the image manually. No URL extraction is attempted in fallback mode.
+  </Accordion>
+</AccordionGroup>
+
+<Note>
+  The Gemini service is initialized once per process. If `GEMINI_API_KEY` is not set in the environment, `self.available` is set to `False` and all calls route directly to the fallback without any HTTP request being made.
+</Note>

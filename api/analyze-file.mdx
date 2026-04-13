@@ -1,0 +1,160 @@
+---
+title: 'POST /api/incidents/analyze-file-preview/'
+description: 'Upload any file to scan it with VirusTotal, MetaDefender, and a heuristic classifier in parallel. Returns a risk level with a Gemini AI explanation.'
+keywords: ['file scan', 'VirusTotal', 'MetaDefender', 'heuristic', 'malware', 'risk level']
+---
+
+Asistente Web IA - Gestión de Incidentes exposes this endpoint so you can submit any file for multi-engine threat analysis. VirusTotal and MetaDefender run concurrently, and a local heuristic classifier evaluates the file name and size. A Gemini AI summary is always included in the response.
+
+## Request
+
+**Method:** `POST`  
+**URL:** `/api/incidents/analyze-file-preview/`  
+**Authentication:** Required — `Authorization: Token <your-token>`  
+**Content-Type:** `multipart/form-data`
+
+<ParamField body="file" type="file" required>
+  The file to analyze. Submitted as a multipart form field named `file`.
+</ParamField>
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url https://your-host/api/incidents/analyze-file-preview/ \
+  --header 'Authorization: Token 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b' \
+  --form 'file=@/path/to/suspicious.exe'
+```
+
+```python Python
+import requests
+
+HEADERS = {"Authorization": "Token 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b"}
+
+with open("/path/to/suspicious.exe", "rb") as f:
+    response = requests.post(
+        "https://your-host/api/incidents/analyze-file-preview/",
+        headers=HEADERS,
+        files={"file": f},
+    )
+
+print(response.json())
+```
+
+</CodeGroup>
+
+## Special behaviors
+
+### Encrypted archives
+
+If the uploaded file is a password-protected ZIP, or any RAR or 7z archive, the endpoint returns immediately with `risk_level: UNKNOWN` and does not contact external engines. The response includes an `encrypted: true` flag and an explanation that the contents cannot be inspected.
+
+### TXT files with URLs
+
+If the file has a `.txt` extension and the text content contains one or more URLs, the endpoint extracts the first URL found and routes it through the full URL analysis pipeline (VirusTotal, MetaDefender, Google Safe Browsing) instead of performing a file scan.
+
+### 24-hour result cache
+
+The SHA-256 hash of the file content is used as the cache key. If the same file was analyzed within the last 24 hours, the cached result is returned immediately without calling any external engines.
+
+### Parallel scanning
+
+VirusTotal and MetaDefender scan the file at the same time using a thread pool. If one engine fails, the other still contributes to the final result.
+
+## Response
+
+<ResponseField name="risk_level" type="string" required>
+  Overall threat classification. One of: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `SAFE`, `UNKNOWN`.
+</ResponseField>
+
+<ResponseField name="engines" type="array" required>
+  One entry per scanning engine that returned a result.
+
+  <Expandable title="properties">
+    <ResponseField name="name" type="string">
+      Engine name, e.g. `VirusTotal`, `MetaDefender`, `Clasificador Heurístico`.
+    </ResponseField>
+    <ResponseField name="positives" type="integer">
+      Number of antivirus signatures that flagged the file. Present for VirusTotal and MetaDefender entries.
+    </ResponseField>
+    <ResponseField name="total" type="integer">
+      Total number of antivirus engines consulted. Present for VirusTotal and MetaDefender entries.
+    </ResponseField>
+    <ResponseField name="link" type="string">
+      URL to the full scan report on the engine's website, or `#` when unavailable.
+    </ResponseField>
+    <ResponseField name="detected" type="boolean">
+      `true` if the engine flagged the file as malicious. Present for heuristic engine entries.
+    </ResponseField>
+    <ResponseField name="status_text" type="string">
+      Human-readable status, e.g. `Limpio` or a list of detected heuristic patterns. Present for heuristic engine entries.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="total_positives" type="integer" required>
+  Sum of positive detections across all engines.
+</ResponseField>
+
+<ResponseField name="total_engines" type="integer" required>
+  Total number of engine checks counted toward the risk score.
+</ResponseField>
+
+<ResponseField name="gemini_explicacion" type="string" required>
+  Gemini AI narrative explaining the threat findings.
+</ResponseField>
+
+<ResponseField name="gemini_recomendacion" type="string" required>
+  Gemini AI recommended remediation steps.
+</ResponseField>
+
+```json Example response
+{
+  "risk_level": "HIGH",
+  "engines": [
+    {
+      "name": "VirusTotal",
+      "positives": 12,
+      "total": 72,
+      "link": "https://www.virustotal.com/gui/file/abc123"
+    },
+    {
+      "name": "MetaDefender",
+      "positives": 3,
+      "total": 30,
+      "link": "https://metadefender.opswat.com/results/file/xyz/regular/overview"
+    },
+    {
+      "name": "Clasificador Heurístico",
+      "detected": false,
+      "status_text": "Limpio",
+      "link": "#"
+    }
+  ],
+  "total_positives": 15,
+  "total_engines": 103,
+  "gemini_explicacion": "El archivo presenta firmas asociadas a troyanos de acceso remoto...",
+  "gemini_recomendacion": "Aislar el endpoint afectado y ejecutar un escaneo completo."
+}
+```
+
+## Risk levels
+
+| Level      | Condition                                                          |
+| ---------- | ------------------------------------------------------------------ |
+| `CRITICAL` | Heuristic alert triggered, or risk score > 70 %                   |
+| `HIGH`     | Risk score > 40 %                                                  |
+| `MEDIUM`   | Risk score > 10 %                                                  |
+| `LOW`      | Risk score > 0 %                                                   |
+| `SAFE`     | Zero detections across all engines                                 |
+| `UNKNOWN`  | Encrypted archive, or all external engines failed with no results  |
+
+The risk score is computed as `(total_positives / total_engines) × 100`. A heuristic alert immediately escalates the result to `CRITICAL`, regardless of the score.
+
+## Error responses
+
+| Status | Condition                        | Response body                             |
+| ------ | -------------------------------- | ----------------------------------------- |
+| `400`  | No file attached to the request  | `{"error": "No se proporcionó archivo"}` |
+| `500`  | Unhandled server-side exception  | `{"error": "<exception message>"}`        |
+| `503`  | All external engines failed      | Engine-level errors logged; result may still include heuristic output |

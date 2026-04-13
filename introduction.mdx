@@ -1,0 +1,80 @@
+---
+title: "Asistente Web IA: AI-powered cybersecurity for everyone"
+description: "Analyze suspicious files, URLs, and images with four security engines and Google Gemini AI. Built for non-technical users at Talleres Luis Mera."
+---
+
+The Asistente Web IA is a cybersecurity incident management platform that lets employees analyze suspicious files, links, and screenshots without any technical knowledge. When a result looks dangerous, creating a tracked incident takes a single click — and analysts receive AI-generated explanations in plain language, not raw antivirus output.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Set up the system and run your first threat analysis in minutes
+  </Card>
+  <Card title="Employee Guide" icon="user" href="/guides/employee">
+    Scan files and URLs, interpret risk levels, and report incidents
+  </Card>
+  <Card title="Analyst Dashboard" icon="chart-bar" href="/guides/analyst">
+    Manage incidents, add notes, and track resolution status
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/authentication">
+    Integrate directly with the REST API using token authentication
+  </Card>
+</CardGroup>
+
+## How it works
+
+The system runs every submission through up to four security engines simultaneously, then uses Google Gemini 2.5 Flash to translate the technical results into a clear risk verdict and plain-language recommendation.
+
+<CardGroup cols={2}>
+  <Card title="Threat Analysis" icon="shield-check" href="/features/threat-analysis">
+    VirusTotal, MetaDefender, Google Safe Browsing, and heuristic scanning
+  </Card>
+  <Card title="AI Assistant" icon="robot" href="/features/ai-assistant">
+    Gemini-powered explanations and image phishing detection via OCR
+  </Card>
+  <Card title="Incident Management" icon="clipboard-list" href="/features/incident-management">
+    Full incident lifecycle with status tracking and analyst notes
+  </Card>
+  <Card title="Performance Caching" icon="bolt" href="/features/caching">
+    24-hour result cache reduces API calls by 65% and responses to under 500 ms
+  </Card>
+</CardGroup>
+
+## User roles
+
+| Role | What they can do |
+|------|-----------------|
+| **Employee** | Analyze files and URLs, view own incidents, create incident reports |
+| **Analyst** | Everything above plus view all incidents, update status, add notes, and export reports |
+| **Administrator** | Everything above plus manage user accounts and change roles |
+
+## System performance
+
+| Metric | Result |
+|--------|--------|
+| Full analysis time | 8–12 seconds |
+| Cached analysis time | Under 500 ms |
+| API call reduction with cache | 65% |
+| Heuristic classifier F1-Score | 90.8% |
+| EICAR test file detection | 97.1% (66 of 68 engines) |
+| Monthly operating cost | $0 |
+
+<Note>
+  This system is a decision-support tool, not an antivirus or network monitor. It helps people make informed decisions when they receive suspicious files or links.
+</Note>
+
+## Get started
+
+<Steps>
+  <Step title="Configure your API keys">
+    Obtain free API keys for VirusTotal, MetaDefender, Google Safe Browsing, and Google Gemini. See the [API keys guide](/configuration/api-keys).
+  </Step>
+  <Step title="Set up the environment">
+    Copy `.env.example` to `.env` and fill in your keys. See the [environment variables reference](/configuration/environment-variables).
+  </Step>
+  <Step title="Start the application">
+    Run with Docker Compose or start the backend and frontend separately. Follow the [quickstart guide](/quickstart).
+  </Step>
+  <Step title="Log in and analyze">
+    Open the web app, log in with your credentials, and upload your first suspicious file or URL.
+  </Step>
+</Steps>

@@ -1,0 +1,132 @@
+---
+title: "GET /api/incidents/stats/ — dashboard statistics"
+description: "Aggregated incident statistics for the analyst dashboard in Asistente Web IA — total, pending, critical counts plus breakdowns by type, risk, and status."
+---
+
+The **Asistente Web IA - Gestión de Incidentes** statistics endpoint returns aggregated counts used to populate the analyst dashboard. It provides a quick snapshot of the current incident landscape — total volume, pending work, critical threats, and breakdowns by type, risk level, and workflow status — all in a single request.
+
+<Note>
+  This endpoint is restricted to users with the `analyst` or `admin` role. Employees receive a `403 Forbidden` response.
+</Note>
+
+---
+
+## GET /api/incidents/stats/
+
+Returns aggregated statistics across all incidents in the system.
+
+### Response
+
+<ResponseField name="total" type="integer">
+  Total number of incidents recorded in the system regardless of status or risk level.
+</ResponseField>
+
+<ResponseField name="pending" type="integer">
+  Number of incidents currently in `pending` status.
+</ResponseField>
+
+<ResponseField name="critical" type="integer">
+  Number of incidents with a `CRITICAL` risk level.
+</ResponseField>
+
+<ResponseField name="by_type" type="object">
+  Incident counts broken down by artifact type.
+  <Expandable title="properties">
+    <ResponseField name="files" type="integer">
+      Count of incidents with `incident_type = file`.
+    </ResponseField>
+    <ResponseField name="urls" type="integer">
+      Count of incidents with `incident_type = url`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="by_risk" type="object">
+  Incident counts for each risk level.
+  <Expandable title="properties">
+    <ResponseField name="CRITICAL" type="integer">Incidents classified as critical.</ResponseField>
+    <ResponseField name="HIGH" type="integer">Incidents classified as high risk.</ResponseField>
+    <ResponseField name="MEDIUM" type="integer">Incidents classified as medium risk.</ResponseField>
+    <ResponseField name="LOW" type="integer">Incidents classified as low risk.</ResponseField>
+    <ResponseField name="SAFE" type="integer">Incidents where no threat was detected (analysis returned SAFE).</ResponseField>
+    <ResponseField name="UNKNOWN" type="integer">Incidents where risk classification was not determined.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="by_status" type="object">
+  Incident counts for each workflow status.
+  <Expandable title="properties">
+    <ResponseField name="pending" type="integer">Incidents awaiting analyst review.</ResponseField>
+    <ResponseField name="investigating" type="integer">Incidents currently under investigation.</ResponseField>
+    <ResponseField name="resolved" type="integer">Incidents that have been closed.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<CodeGroup>
+
+```bash curl
+curl --request GET \
+  --url https://your-backend.onrender.com/api/incidents/stats/ \
+  --header 'Authorization: Token YOUR_TOKEN'
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    "https://your-backend.onrender.com/api/incidents/stats/",
+    headers={"Authorization": "Token YOUR_TOKEN"},
+)
+stats = response.json()
+print(f"Total: {stats['total']} | Pending: {stats['pending']} | Critical: {stats['critical']}")
+print(f"By risk: {stats['by_risk']}")
+print(f"By status: {stats['by_status']}")
+```
+
+</CodeGroup>
+
+**Example response**
+
+```json
+{
+  "total": 248,
+  "pending": 31,
+  "critical": 14,
+  "by_type": {
+    "files": 103,
+    "urls": 145
+  },
+  "by_risk": {
+    "CRITICAL": 14,
+    "HIGH": 37,
+    "MEDIUM": 62,
+    "LOW": 89,
+    "SAFE": 31,
+    "UNKNOWN": 15
+  },
+  "by_status": {
+    "pending": 31,
+    "investigating": 18,
+    "resolved": 199
+  }
+}
+```
+
+---
+
+## GET /api/health/
+
+Returns a simple liveness response to confirm the backend is running. Used by Render.com and any other platform that requires a health-check endpoint.
+
+**Authentication:** None required.
+
+**Response:** HTTP `200 OK`
+
+```json
+{ "status": "alive" }
+```
+
+```bash curl
+curl --request GET \
+  --url https://your-backend.onrender.com/api/health/
+```

@@ -1,0 +1,125 @@
+---
+title: 'Obtain API keys for all security services'
+description: 'Step-by-step guide to getting free API keys for VirusTotal, MetaDefender Cloud, Google Safe Browsing, and Google Gemini — all required by Asistente Web IA.'
+keywords: ['api keys', 'virustotal', 'metadefender', 'google safe browsing', 'gemini', 'setup']
+---
+
+Asistente Web IA - Gestión de Incidentes integrates four external security services to analyze files and URLs: VirusTotal, MetaDefender Cloud, Google Safe Browsing, and Google Gemini. All four offer free tiers with sufficient quota for a small-to-medium deployment, and the entire system operates at zero monthly cost within those limits. You must obtain a key for each service before the backend can produce complete analysis results.
+
+<Note>
+Free-tier rate limits apply to all four services. Heavy usage — such as running load tests or analyzing hundreds of files per hour — will exhaust daily or per-minute quotas. For production workloads, review each service's paid plans. The application's built-in 24-hour file-based cache reduces repeat API calls by up to 65%, which significantly extends free-tier headroom.
+</Note>
+
+## Getting your keys
+
+<Steps>
+  <Step title="VirusTotal">
+    VirusTotal scans files and URLs against 68+ antivirus engines and is the primary detection engine in the application.
+
+    1. Go to [virustotal.com](https://www.virustotal.com) and click **Join our community**.
+    2. Create a free account with your email address.
+    3. After verifying your email, sign in and open the user menu in the top-right corner.
+    4. Click **API key** to view your personal key.
+    5. Copy the key — it is a 64-character hexadecimal string.
+
+    **Free tier limits:** 4 lookups per minute, 500 lookups per day, 15,500 lookups per month. Public API only (no private scanning).
+
+    Add it to your `.env`:
+    ```env
+    VIRUSTOTAL_API_KEY=your-64-char-hex-key
+    ```
+  </Step>
+
+  <Step title="MetaDefender Cloud">
+    MetaDefender Cloud (by OPSWAT) provides a second independent multi-engine scan, cross-checking VirusTotal results with a different set of antivirus vendors.
+
+    1. Go to [metadefender.opswat.com](https://metadefender.opswat.com) and click **Sign Up**.
+    2. Register with your email address and verify it.
+    3. After signing in, click your avatar in the top-right corner and choose **My Account**.
+    4. Navigate to the **API Key** tab to view your key.
+    5. Copy the key.
+
+    **Free tier limits:** 5,000 lookups per day, no credit card required.
+
+    Add it to your `.env`:
+    ```env
+    METADEFENDER_API_KEY=your-metadefender-key
+    ```
+  </Step>
+
+  <Step title="Google Safe Browsing">
+    Google Safe Browsing checks URLs against Google's continuously updated lists of phishing, malware, and unwanted software sites.
+
+    1. Go to [console.cloud.google.com](https://console.cloud.google.com) and sign in with a Google account.
+    2. Create a new project (or select an existing one). Using the same project for Safe Browsing and Gemini is recommended — see the tip below.
+    3. In the left sidebar, go to **APIs & Services → Library**.
+    4. Search for **Safe Browsing API** and click **Enable**.
+    5. Go to **APIs & Services → Credentials** and click **Create Credentials → API key**.
+    6. Copy the generated key. Optionally, click **Restrict key** to limit it to the Safe Browsing API only.
+
+    **Free tier limits:** 10,000 URL lookups per day at no cost.
+
+    Add it to your `.env`:
+    ```env
+    GOOGLE_SAFE_BROWSING_KEY=your-google-api-key
+    ```
+
+    <Note>
+      In `settings.py`, the backend reads this key from the `GOOGLE_SAFE_BROWSING_API_KEY` environment variable. If that variable is not set, it automatically falls back to the value of `GOOGLE_API_KEY` (the Gemini key). If both services share the same Google Cloud project, you can use one key for both variables — or simply omit `GOOGLE_SAFE_BROWSING_KEY` entirely and let the fallback handle it.
+    </Note>
+  </Step>
+
+  <Step title="Google Gemini (Generative AI)">
+    Google Gemini 2.5 Flash generates the plain-language AI explanations that help non-technical staff understand scan results without cybersecurity expertise.
+
+    1. Go to [aistudio.google.com](https://aistudio.google.com) and sign in with your Google account.
+    2. Click **Get API key** in the left sidebar.
+    3. Click **Create API key** and select a Google Cloud project (use the same project as Safe Browsing if possible — see the tip below).
+    4. Copy the generated key.
+
+    **Free tier limits:** Gemini 2.5 Flash is available on the free tier with generous quota. Check [ai.google.dev/pricing](https://ai.google.dev/pricing) for current limits.
+
+    Add it to your `.env` using the variable name the code reads:
+    ```env
+    GEMINI_API_KEY=your-gemini-api-key
+    ```
+
+    <Note>
+      The `.env.example` file uses `GOOGLE_API_KEY` as the placeholder name, but `gemini_service.py` reads `GEMINI_API_KEY`. Use `GEMINI_API_KEY` in your actual `.env` file.
+    </Note>
+  </Step>
+</Steps>
+
+<Tip>
+Google Safe Browsing and Google Gemini both use Google Cloud API keys and can share the same Google Cloud project. If you create the Gemini key in Google AI Studio, it automatically links to a Cloud project. Enable the Safe Browsing API in that same project and create an additional API key there, or use the same key for both. The `settings.py` fallback (`GSB_API_KEY = config('GOOGLE_SAFE_BROWSING_API_KEY', default=GEMINI_API_KEY)`) is designed exactly for this case.
+</Tip>
+
+<Warning>
+Keep all API keys out of source code and version control. Store them only in `backend/.env` locally (which is listed in `.gitignore`) or in your hosting provider's environment variable dashboard. If a key is accidentally committed or exposed, revoke it immediately from the respective service's dashboard and generate a new one.
+</Warning>
+
+## Putting the keys into .env
+
+Once you have all four keys, your `backend/.env` file should look like this:
+
+```env backend/.env
+SECRET_KEY=your-long-random-django-secret-key
+DEBUG=False
+CORS_ALLOWED_ORIGINS=http://localhost:3000
+
+VIRUSTOTAL_API_KEY=abc123...your-virustotal-key
+METADEFENDER_API_KEY=def456...your-metadefender-key
+GOOGLE_SAFE_BROWSING_KEY=AIza...your-safe-browsing-key
+GEMINI_API_KEY=AIza...your-gemini-key
+```
+
+For instructions on generating a secure `SECRET_KEY`, see [Environment variables reference](/configuration/environment-variables).
+
+<CardGroup cols={2}>
+  <Card title="Environment variables reference" icon="file-lines" href="/configuration/environment-variables">
+    Full reference for every variable in .env, including defaults and how settings.py reads them.
+  </Card>
+  <Card title="Run with Docker Compose" icon="docker" href="/configuration/docker">
+    Start the full backend and frontend stack locally using Docker Compose.
+  </Card>
+</CardGroup>

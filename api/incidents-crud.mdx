@@ -1,0 +1,255 @@
+---
+title: "Create, list, and retrieve incidents"
+description: "Create, list, retrieve, and update incident status in Asistente Web IA — request fields, query filters, ordering options, and response shapes."
+---
+
+The **Asistente Web IA - Gestión de Incidentes** core incident endpoints let authenticated users submit new incidents, query the incident list with filters and pagination, fetch a single incident record, and — for analysts and administrators — update the workflow status. All endpoints require a valid token in the `Authorization` header.
+
+---
+
+## POST /api/incidents/create/
+
+Creates a new incident record. The request must use `multipart/form-data` because it can carry an uploaded file alongside the JSON analysis snapshot.
+
+The `analysis_result` field should contain the full JSON object returned by one of the preview endpoints (`/analyze-file-preview/`, `/analyze-url-preview/`, `/analyze-image-preview/`). When provided, the backend extracts `risk_level`, `virustotal_result`, `metadefender_result`, and `gemini_analysis` from it automatically.
+
+### Request body
+
+<ParamField body="incident_type" type="string" required>
+  Type of the submitted artifact. One of `url`, `file`, or `image`.
+</ParamField>
+
+<ParamField body="url" type="string">
+  The target URL. Required when `incident_type` is `url`.
+</ParamField>
+
+<ParamField body="file" type="file">
+  The uploaded file. Required when `incident_type` is `file` or `image`.
+</ParamField>
+
+<ParamField body="description" type="string">
+  Free-text description of the incident. Defaults to an empty string.
+</ParamField>
+
+<ParamField body="analysis_result" type="string">
+  JSON-serialized analysis snapshot from a preview endpoint. When sent via `multipart/form-data`, encode this field as a JSON string; the backend deserializes it automatically.
+</ParamField>
+
+### Response
+
+Returns the created `Incident` object with HTTP `201 Created`.
+
+<ResponseField name="id" type="integer">Auto-incremented incident ID.</ResponseField>
+<ResponseField name="incident_type" type="string">One of `url`, `file`, or `image`.</ResponseField>
+<ResponseField name="url" type="string">Target URL, or `null`.</ResponseField>
+<ResponseField name="attached_file" type="string">Relative media path, or `null`.</ResponseField>
+<ResponseField name="description" type="string">Reporter-provided description.</ResponseField>
+<ResponseField name="risk_level" type="string">Derived from `analysis_result.risk_level`. Defaults to `UNKNOWN`.</ResponseField>
+<ResponseField name="virustotal_result" type="object">VirusTotal engine snapshot, or `null`.</ResponseField>
+<ResponseField name="metadefender_result" type="object">MetaDefender engine snapshot, or `null`.</ResponseField>
+<ResponseField name="gemini_analysis" type="string">AI explanation and recommendation text.</ResponseField>
+<ResponseField name="analysis_result" type="object">Full analysis snapshot.</ResponseField>
+<ResponseField name="status" type="string">`pending` on creation.</ResponseField>
+<ResponseField name="analyst_notes" type="string">Empty string on creation.</ResponseField>
+<ResponseField name="reported_by" type="integer">ID of the authenticated user.</ResponseField>
+<ResponseField name="reported_by_username" type="string">Username of the reporter.</ResponseField>
+<ResponseField name="created_at" type="string">ISO 8601 creation timestamp.</ResponseField>
+<ResponseField name="updated_at" type="string">ISO 8601 last-update timestamp.</ResponseField>
+<ResponseField name="notes" type="array">Empty array on creation.</ResponseField>
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url https://your-backend.onrender.com/api/incidents/create/ \
+  --header 'Authorization: Token YOUR_TOKEN' \
+  --form 'incident_type=url' \
+  --form 'url=https://suspicious-site.example.com' \
+  --form 'description=Link received in phishing email' \
+  --form 'analysis_result={"risk_level":"HIGH","positives":3,"total":90}'
+```
+
+```python Python
+import requests, json
+
+response = requests.post(
+    "https://your-backend.onrender.com/api/incidents/create/",
+    headers={"Authorization": "Token YOUR_TOKEN"},
+    data={
+        "incident_type": "url",
+        "url": "https://suspicious-site.example.com",
+        "description": "Link received in phishing email",
+        "analysis_result": json.dumps({"risk_level": "HIGH", "positives": 3, "total": 90}),
+    },
+)
+print(response.json())
+```
+
+</CodeGroup>
+
+---
+
+## GET /api/incidents/list/
+
+Returns a paginated list of incidents. Employees see only their own incidents; analysts and administrators see all incidents.
+
+### Query parameters
+
+<ParamField query="incident_type" type="string">
+  Filter by artifact type. One of `url`, `file`, or `image`. Pass `all` or omit to skip this filter.
+</ParamField>
+
+<ParamField query="risk_level" type="string">
+  Filter by risk classification. One of `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`, or `UNKNOWN`.
+</ParamField>
+
+<ParamField query="status" type="string">
+  Filter by workflow status. One of `pending`, `investigating`, or `resolved`.
+</ParamField>
+
+<ParamField query="search" type="string">
+  Full-text search across `description`, `url`, `analyst_notes`, and `id`.
+</ParamField>
+
+<ParamField query="date_from" type="string">
+  Inclusive start date for `created_at`. Format: `YYYY-MM-DD`.
+</ParamField>
+
+<ParamField query="date_to" type="string">
+  Inclusive end date for `created_at`. Format: `YYYY-MM-DD`.
+</ParamField>
+
+<ParamField query="ordering" type="string" default="id">
+  Sort field. One of `id`, `-id`, `created_at`, `-created_at`, `risk_level`, `-risk_level`. Prefix with `-` for descending order.
+</ParamField>
+
+<ParamField query="page" type="integer" default="1">
+  Page number. The server uses a page size of 200.
+</ParamField>
+
+### Response
+
+<ResponseField name="count" type="integer">Total number of incidents matching the filters.</ResponseField>
+<ResponseField name="next" type="string">URL of the next page, or `null`.</ResponseField>
+<ResponseField name="previous" type="string">URL of the previous page, or `null`.</ResponseField>
+<ResponseField name="results" type="array">Array of incident objects. See the fields described in the POST response above.</ResponseField>
+
+<CodeGroup>
+
+```bash curl
+curl --request GET \
+  --url 'https://your-backend.onrender.com/api/incidents/list/?status=pending&risk_level=CRITICAL&ordering=-created_at' \
+  --header 'Authorization: Token YOUR_TOKEN'
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    "https://your-backend.onrender.com/api/incidents/list/",
+    headers={"Authorization": "Token YOUR_TOKEN"},
+    params={"status": "pending", "risk_level": "CRITICAL", "ordering": "-created_at"},
+)
+data = response.json()
+print(f"Total: {data['count']}, Results: {len(data['results'])}")
+```
+
+</CodeGroup>
+
+---
+
+## GET /api/incidents/\<id\>/
+
+Returns the full incident object for a single incident.
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The incident ID.
+</ParamField>
+
+<Note>
+  Employees requesting an incident they did not report receive a `403 Forbidden` response. Analysts and administrators can retrieve any incident.
+</Note>
+
+<CodeGroup>
+
+```bash curl
+curl --request GET \
+  --url https://your-backend.onrender.com/api/incidents/42/ \
+  --header 'Authorization: Token YOUR_TOKEN'
+```
+
+```python Python
+import requests
+
+response = requests.get(
+    "https://your-backend.onrender.com/api/incidents/42/",
+    headers={"Authorization": "Token YOUR_TOKEN"},
+)
+print(response.json())
+```
+
+</CodeGroup>
+
+---
+
+## PATCH /api/incidents/\<id\>/update-status/
+
+Updates the workflow status of an incident. Restricted to analysts and administrators.
+
+When `analyst_notes` is provided, the backend automatically creates an `IncidentNote` entry with the content prefixed by `[Cambio de Estado]`, in addition to updating the incident record.
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The incident ID.
+</ParamField>
+
+### Request body
+
+<ParamField body="status" type="string" required>
+  New workflow status. One of `pending`, `investigating`, or `resolved`.
+</ParamField>
+
+<ParamField body="analyst_notes" type="string">
+  Optional note to attach to this status change. Stored as an `IncidentNote` with the prefix `[Cambio de Estado]`.
+</ParamField>
+
+### Response
+
+```json
+{
+  "message": "Estado actualizado",
+  "status": "investigating"
+}
+```
+
+<CodeGroup>
+
+```bash curl
+curl --request PATCH \
+  --url https://your-backend.onrender.com/api/incidents/42/update-status/ \
+  --header 'Authorization: Token YOUR_TOKEN' \
+  --header 'Content-Type: application/json' \
+  --data '{"status": "investigating", "analyst_notes": "Confirmed malicious domain, blocking at perimeter firewall."}'
+```
+
+```python Python
+import requests
+
+response = requests.patch(
+    "https://your-backend.onrender.com/api/incidents/42/update-status/",
+    headers={
+        "Authorization": "Token YOUR_TOKEN",
+        "Content-Type": "application/json",
+    },
+    json={
+        "status": "investigating",
+        "analyst_notes": "Confirmed malicious domain, blocking at perimeter firewall.",
+    },
+)
+print(response.json())
+```
+
+</CodeGroup>

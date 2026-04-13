@@ -1,0 +1,212 @@
+---
+title: "Deploy to Render.com"
+description: "Deploy Asistente Web IA - Gestión de Incidentes to production on Render.com using the included render.yaml, environment variables, and free-tier services."
+keywords: ["deployment", "Render.com", "production", "Docker", "render.yaml", "Django", "React", "cloud hosting"]
+---
+
+Asistente Web IA - Gestión de Incidentes ships with a `render.yaml` Blueprint that provisions both the Django backend and the React frontend as separate Render.com services. This page explains the configuration, the environment variables you must supply, and how to trigger your first production deployment.
+
+## How render.yaml works
+
+The `render.yaml` file at the project root is a [Render Blueprint](https://render.com/docs/infrastructure-as-code) — a declarative manifest that Render reads to create and configure your services automatically.
+
+The file defines two services:
+
+```yaml render.yaml
+services:
+  # Backend Django
+  - type: web
+    name: tecnicontrol-backend
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && python manage.py migrate && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: False
+      - key: ALLOWED_HOSTS
+        value: .onrender.com
+      - key: VIRUSTOTAL_API_KEY
+        sync: false
+      - key: METADEFENDER_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GOOGLE_SAFE_BROWSING_KEY
+        sync: false
+
+  # Frontend React
+  - type: web
+    name: tecnicontrol-frontend
+    env: static
+    region: oregon
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/build
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: REACT_APP_API_URL
+        value: https://tecnicontrol-backend.onrender.com
+```
+
+**Key points:**
+
+- The backend runs under `gunicorn` (not the Django dev server), which is production-appropriate.
+- `python manage.py migrate` runs automatically on every deploy, keeping the SQLite database schema up to date.
+- `SECRET_KEY` is generated once by Render and stored securely — you do not need to supply it manually.
+- The frontend is deployed as a **static site** (`env: static`), so Render serves the pre-built React bundle from a CDN. The single-page app wildcard rewrite (`/* → /index.html`) ensures client-side routing works correctly.
+- `REACT_APP_API_URL` is hardcoded to the backend service URL. If you rename the backend service, update this value accordingly.
+
+## Environment variables
+
+The four API keys marked `sync: false` must be entered manually in the Render dashboard — Render will not generate or inherit them automatically.
+
+| Variable | Where to get it | Required |
+| --- | --- | --- |
+| `VIRUSTOTAL_API_KEY` | [VirusTotal](https://www.virustotal.com/gui/my-apikey) developer portal | Yes |
+| `METADEFENDER_API_KEY` | [MetaDefender Cloud](https://metadefender.opswat.com/) dashboard | Yes |
+| `GOOGLE_API_KEY` | Google Cloud Console → Gemini API | Yes |
+| `GOOGLE_SAFE_BROWSING_KEY` | Google Cloud Console → Safe Browsing API | Yes |
+
+<Warning>
+  Never commit your `.env` file or any file containing real API keys to your git repository. The `.env` file is listed in `.gitignore` — do not remove it from that list. Leaked API keys can result in unexpected charges and unauthorized use of your security scanning quota.
+</Warning>
+
+## Deploy with the Blueprint
+
+<Steps>
+  <Step title="Push your code to GitHub">
+    Make sure your repository is pushed to GitHub (or GitLab). Render connects directly to your git host to trigger builds.
+
+    ```bash
+    git add .
+    git commit -m "initial commit"
+    git push origin main
+    ```
+  </Step>
+
+  <Step title="Connect the Blueprint on Render">
+    1. Log in to [Render.com](https://render.com) and go to **Blueprints** in the sidebar.
+    2. Click **New Blueprint Instance**.
+    3. Select your repository and branch (`main`).
+    4. Render detects `render.yaml` automatically and shows a preview of the two services it will create.
+    5. Click **Apply** to start the provisioning process.
+  </Step>
+
+  <Step title="Set the secret environment variables">
+    After the Blueprint is applied, open each service in the Render dashboard and navigate to **Environment**.
+
+    For `tecnicontrol-backend`, add the four keys that are marked `sync: false` in `render.yaml`:
+
+    - `VIRUSTOTAL_API_KEY`
+    - `METADEFENDER_API_KEY`
+    - `GOOGLE_API_KEY`
+    - `GOOGLE_SAFE_BROWSING_KEY`
+
+    Click **Save Changes**. Render will trigger a new build automatically.
+  </Step>
+
+  <Step title="Wait for the build to complete">
+    The backend build runs `pip install -r backend/requirements.txt`, then starts gunicorn and executes migrations. The frontend build runs `npm install && npm run build` and publishes the `frontend/build` directory.
+
+    Build times on the free tier are typically 3–6 minutes for the first deploy (subsequent deploys are faster due to layer caching).
+  </Step>
+
+  <Step title="Verify the deployment">
+    Once both services show **Live** status in the Render dashboard:
+
+    - Backend health check: `https://tecnicontrol-backend.onrender.com/admin/`
+    - Frontend: `https://tecnicontrol-frontend.onrender.com`
+
+    Log in using the pre-seeded test accounts (`admin` / `admin123`, `analista` / `analista123`, `empleado` / `empleado123`) and run a test analysis to confirm all four API integrations are working.
+  </Step>
+</Steps>
+
+## Docker deployment
+
+The repository includes individual `Dockerfile` files for both services if you prefer to build and push images manually or deploy to a container platform other than Render.
+
+<CodeGroup>
+  ```dockerfile backend/Dockerfile
+  FROM python:3.11-slim
+
+  WORKDIR /app
+
+  RUN apt-get update && apt-get install -y gcc \
+      && rm -rf /var/lib/apt/lists/*
+
+  COPY requirements.txt .
+  RUN pip install --no-cache-dir -r requirements.txt
+
+  COPY . .
+
+  EXPOSE 8000
+
+  CMD ["sh", "-c", "python manage.py migrate --run-syncdb && python manage.py runserver 0.0.0.0:8000"]
+  ```
+
+  ```dockerfile frontend/Dockerfile
+  FROM node:18-slim
+
+  WORKDIR /app
+
+  COPY package*.json .
+  RUN npm install
+
+  COPY . .
+
+  EXPOSE 3000
+
+  CMD ["npm", "start"]
+  ```
+</CodeGroup>
+
+<Note>
+  The backend `Dockerfile` uses `python manage.py runserver` for convenience in demo and local Docker environments. In production (including the Render Blueprint), the start command uses `gunicorn config.wsgi:application` instead, which is required for concurrent request handling.
+</Note>
+
+To build and run both containers locally with Docker Compose:
+
+```bash
+cp backend/.env.example backend/.env
+# Edit backend/.env with your API keys
+
+docker-compose up --build -d
+docker-compose ps       # confirm both containers are Up
+docker-compose down     # stop when done
+```
+
+## Free tier limitations
+
+<Note>
+  Both Render services use the **free tier** (`plan: free` for the backend, static site for the frontend). Be aware of the following constraints:
+
+  - **Backend spin-down:** Free web services on Render spin down after 15 minutes of inactivity. The first request after a spin-down takes 30–60 seconds to respond while the instance restarts. This adds latency on top of the 8–12 second analysis time.
+  - **Build minutes:** Free accounts receive 400 build minutes per month. Each full deploy consumes approximately 5–8 minutes.
+  - **No persistent disk:** SQLite data is stored on the container's ephemeral filesystem. A new deploy resets the database. For persistent incident history in production, migrate to PostgreSQL using Render's managed database add-on and update `DATABASES` in `config/settings.py`.
+  - **API rate limits:** All four security APIs (VirusTotal, MetaDefender, Google Safe Browsing, Google Gemini) impose free-tier rate limits. The built-in cache mitigates repeated lookups, but high-volume usage may hit these limits.
+</Note>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Run the application locally before deploying to production.
+  </Card>
+  <Card title="Environment variables reference" icon="key" href="/configuration/environment-variables">
+    Full reference for every environment variable the application reads.
+  </Card>
+  <Card title="User roles" icon="users" href="/guides/employee">
+    Configure Employee, Analyst, and Administrator accounts after deployment.
+  </Card>
+  <Card title="Analysis engine" icon="shield" href="/features/threat-analysis">
+    Understand how VirusTotal, MetaDefender, Safe Browsing, and Gemini are orchestrated.
+  </Card>
+</CardGroup>

@@ -1,0 +1,133 @@
+---
+title: 'Result caching: 65% fewer API calls, faster responses'
+description: 'Asistente Web IA caches analysis results for 24 hours, cutting external API calls by 65% and serving repeated file and URL lookups in under 500 milliseconds.'
+keywords: ['caching', 'analysis cache', 'performance', 'API calls', 'SHA-256', 'MD5', 'Django cache', 'deduplication']
+---
+
+Asistente Web IA - Gestión de Incidentes implements a two-layer caching strategy that prevents repeated calls to VirusTotal, MetaDefender, and Google Safe Browsing for resources that have already been analyzed. This reduces external API consumption by 65% and makes subsequent lookups for the same file or URL resolve in under 500 milliseconds.
+
+## Two caching layers
+
+<CardGroup cols={2}>
+  <Card title="Django cache framework" icon="zap">
+    In-memory cache using Django's cache framework. Results are stored with a 24-hour TTL (86400 seconds). Cache hits are served without touching the database or external APIs.
+  </Card>
+  <Card title="AnalysisCache database model" icon="database">
+    A persistent database table that stores full engine results per resource. Survives server restarts, supports hit counting, and enables cache warming across deployments.
+  </Card>
+</CardGroup>
+
+## Cache keys
+
+Each cached result is indexed by a deterministic key derived from the resource content, not the filename or URL string alone.
+
+| Content type | Key format | Hash algorithm |
+|---|---|---|
+| File | `file_analysis_{sha256}` | SHA-256 of file bytes |
+| URL | `url_analysis_{md5}` | MD5 of the normalized URL string |
+
+Using SHA-256 of the file bytes means that two uploads of the same file—regardless of filename—share the same cache entry. Renaming `malware.exe` to `invoice.pdf` does not bypass the cache.
+
+URL keys use MD5 of the normalized URL (after `https://` is prepended if missing), so `google.com` and `https://google.com` resolve to the same cache entry.
+
+<Tip>
+  The SHA-256 file deduplication is especially valuable in malware outbreak scenarios. When multiple employees submit the same malicious attachment, only the first submission triggers live engine calls. Every subsequent submission is served from cache at sub-500 ms latency, protecting your API quota and speeding up triage.
+</Tip>
+
+## AnalysisCache database model
+
+The `AnalysisCache` model provides persistent storage for analysis results with the following fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `cache_key` | char(64), unique | SHA-256 of `"{type}:{identifier}"` |
+| `analysis_type` | string | `url` or `file` |
+| `url` | URL | Stored URL, if applicable |
+| `file_hash` | char(64) | SHA-256 hash of the analyzed file |
+| `file_name` | char(255) | Original filename at time of upload |
+| `virustotal_result` | JSON | Full VirusTotal response snapshot |
+| `metadefender_result` | JSON | Full MetaDefender response snapshot |
+| `google_sb_result` | JSON | Full Google Safe Browsing response snapshot |
+| `gemini_result` | JSON | Full Gemini AI response snapshot |
+| `risk_level` | string | Final computed risk level |
+| `positives` | integer | Total positive detections at cache time |
+| `total` | integer | Total engines queried at cache time |
+| `hits` | integer | Number of times this cache entry has been served |
+| `expires_at` | datetime | Expiry timestamp (now + 24 hours by default) |
+| `created_at` | datetime | Set automatically on first store |
+
+## Cache key generation
+
+```python
+@staticmethod
+def generate_cache_key(analysis_type, identifier):
+    key_string = f"{analysis_type}:{identifier}"
+    return hashlib.sha256(key_string.encode()).hexdigest()
+```
+
+The `identifier` is the SHA-256 hash of the file bytes (for files) or the normalized URL string (for URLs). The resulting cache key is a 64-character hex string that is unique per content type and content value.
+
+## Cache lookup
+
+```python
+@staticmethod
+def get_cached(analysis_type, identifier):
+    cache_key = AnalysisCache.generate_cache_key(analysis_type, identifier)
+    try:
+        cache = AnalysisCache.objects.get(
+            cache_key=cache_key,
+            expires_at__gt=timezone.now()
+        )
+        cache.hits += 1
+        cache.save(update_fields=['hits'])
+        return cache
+    except AnalysisCache.DoesNotExist:
+        return None
+```
+
+`get_cached()` checks `expires_at` against the current timestamp, increments the `hits` counter on every successful read, and returns `None` if the entry is missing or expired. The `hits` field provides a per-resource API call savings metric visible in the admin interface.
+
+## Cache storage
+
+```python
+@staticmethod
+def store(analysis_type, identifier, results, expiration_hours=24):
+    cache_key = AnalysisCache.generate_cache_key(analysis_type, identifier)
+    expires_at = timezone.now() + timezone.timedelta(hours=expiration_hours)
+    cache, created = AnalysisCache.objects.update_or_create(
+        cache_key=cache_key,
+        defaults={ ... }
+    )
+    return cache
+```
+
+`store()` uses `update_or_create` so that re-analysis of a previously cached resource overwrites the old entry rather than creating a duplicate. The `expiration_hours` parameter defaults to 24 but can be adjusted per call.
+
+## How caching fits into the analysis flow
+
+<Steps>
+  <Step title="Compute the cache key">
+    For files: SHA-256 of the file bytes. For URLs: MD5 of the normalized URL. The key is computed before any external API call is made.
+  </Step>
+  <Step title="Check Django cache">
+    `cache.get(cache_key)` is called first. If a result is found, it is returned immediately. This is the fastest path: no database query, no network call.
+  </Step>
+  <Step title="Run full analysis (cache miss)">
+    If the Django cache returns nothing, all applicable engines are called. The full analysis takes 8–12 seconds for a new resource.
+  </Step>
+  <Step title="Store in Django cache">
+    The completed result is stored with `cache.set(cache_key, response_data, 86400)`. The 86400-second TTL ensures cache entries expire after 24 hours.
+  </Step>
+</Steps>
+
+## Performance characteristics
+
+| Scenario | Typical response time |
+|---|---|
+| Cache hit (Django in-memory) | < 500 ms |
+| Cache miss, file already in VT/MD databases | 8–12 s |
+| Cache miss, file unknown (full upload + polling) | 30–90 s |
+
+<Note>
+  Cache entries expire after 24 hours. After expiration, the next analysis request for the same resource will trigger a fresh call to all external engines. This ensures that newly listed malware signatures are picked up within one day of a resource's prior clean result.
+</Note>

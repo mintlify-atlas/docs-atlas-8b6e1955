@@ -1,0 +1,130 @@
+---
+title: 'Multi-engine threat analysis for files and URLs'
+description: 'How Asistente Web IA routes files, URLs, and images through VirusTotal, MetaDefender, Google Safe Browsing, and a heuristic classifier to assign a risk score.'
+keywords: ['threat analysis', 'virustotal', 'metadefender', 'google safe browsing', 'heuristic', 'malware', 'phishing', 'risk score']
+---
+
+Asistente Web IA - Gestión de Incidentes applies a multi-engine analysis pipeline to every file, URL, or image submitted by users. Each content type is routed through the appropriate set of engines, results are aggregated into a single risk score, and a final severity level is assigned automatically.
+
+## Engine coverage by content type
+
+The four engines do not apply equally to every submission. The table below maps each engine to the content types it handles.
+
+| Engine | Files | URLs | Images |
+|---|---|---|---|
+| VirusTotal | Yes | Yes | No |
+| MetaDefender | Yes | Yes | No |
+| Google Safe Browsing | No | Yes | No |
+| Heuristic Classifier | Yes | Yes | No |
+| Gemini Vision (OCR) | No | No | Yes (primary) |
+
+<Note>
+  The EICAR test file achieves 97.1% detection across 68 antivirus engines on VirusTotal, making it a reliable baseline for verifying that the analysis pipeline is working correctly. Submit it to confirm that VirusTotal and MetaDefender are both responding.
+</Note>
+
+## How files are analyzed
+
+<Steps>
+  <Step title="Hash the file">
+    The backend computes a SHA-256 digest of the uploaded file content. This hash is used as the cache key and as the lookup identifier for both VirusTotal and MetaDefender before any upload is attempted.
+  </Step>
+  <Step title="Parallel hash lookup (VirusTotal + MetaDefender)">
+    Both engines are queried simultaneously using `ThreadPoolExecutor(max_workers=2)`. VirusTotal checks its `/file/report` endpoint; MetaDefender checks `/hash/{sha256}`. If either engine already has a report for that hash, the result is returned immediately without uploading the file.
+  </Step>
+  <Step title="Upload if unknown">
+    If the hash is not found in an engine's database, the file is uploaded to that engine's scan endpoint. The system then polls for results, waiting up to 90 seconds (18 attempts × 5 s) for VirusTotal and 60 seconds (12 attempts × 5 s) for MetaDefender.
+  </Step>
+  <Step title="Heuristic classification">
+    After the remote engines respond, the local `HeuristicService` inspects the filename synchronously. It flags dangerous extensions (`.exe`, `.bat`, `.cmd`, `.sh`, `.vbs`, `.js`, `.scr`, `.pif`, `.application`, `.gadget`, `.msi`, `.msp`, `.com`, `.hta`, `.cpl`, `.msc`, `.jar`), double extensions camouflaged as safe ones (e.g., `factura.pdf.exe`), and social-engineering keywords in the filename (`factura`, `invoice`, `urgente`, `pago`, `premio`, etc.).
+  </Step>
+  <Step title="Risk score and severity">
+    All engine detections are summed and the risk score is computed. A final severity level is assigned and the result is cached for 24 hours.
+  </Step>
+</Steps>
+
+<Warning>
+  Encrypted ZIP, RAR, and 7z archives cannot be analyzed. When the system detects a password-protected archive, it returns `risk_level: UNKNOWN` immediately and does not call any external engine. Treat encrypted archives from untrusted sources with maximum caution.
+</Warning>
+
+### TXT file special handling
+
+If the uploaded file has a `.txt` extension, the pipeline extracts URLs from the text content using a regex pattern before running any engine. The first URL found is passed through the full URL analysis pipeline (VirusTotal + MetaDefender + Google Safe Browsing). The file-analysis engines are skipped entirely in this case.
+
+## How URLs are analyzed
+
+<Steps>
+  <Step title="Normalize and validate">
+    If the submitted string does not begin with `http://` or `https://`, the prefix `https://` is added automatically. The URL is then validated with a regex pattern. Bare text such as `hola` or random strings are rejected immediately with `risk_level: UNKNOWN`.
+  </Step>
+  <Step title="Check the cache">
+    The URL is hashed with MD5 to form the cache key `url_analysis_{md5}`. If a cached result exists in Django's cache framework, it is returned in under 500 ms without calling any external engine.
+  </Step>
+  <Step title="Run all four engines">
+    VirusTotal and MetaDefender are called in parallel via `ThreadPoolExecutor(max_workers=2)`. Google Safe Browsing and the Heuristic Classifier are called sequentially after the parallel pair completes.
+  </Step>
+  <Step title="Heuristic URL checks">
+    The `HeuristicService` inspects the domain for phishing keywords (`login`, `signin`, `bank`, `verify`, `wallet`, `suspended`, `urgent`, `password`, etc.), IP-based URLs, typosquatting strings (`g00gle`, `paypa1`, `micros0ft`, `faceb00k`, `hotmai1`, `gmai1`), and domains longer than 50 characters. Each pattern contributes to a local risk score that can escalate the final severity.
+  </Step>
+  <Step title="Aggregate and store">
+    Results are combined and cached for 24 hours.
+  </Step>
+</Steps>
+
+## How images are analyzed
+
+Images follow a separate path that uses Gemini Vision exclusively.
+
+<Steps>
+  <Step title="Gemini Vision OCR">
+    The JPEG or PNG image is base64-encoded and sent to `gemini-2.5-flash`. The model performs OCR, identifies phishing indicators (fake login pages, spoofed bank emails, pop-up alerts, suspicious links), and extracts any URLs visible in the image.
+  </Step>
+  <Step title="URL re-analysis">
+    If Gemini Vision extracts one or more URLs from the image, those URLs are passed through the full URL analysis pipeline (VirusTotal + MetaDefender + Google Safe Browsing).
+  </Step>
+  <Step title="Risk escalation">
+    The final risk level is the higher of the image-level risk returned by Gemini and the URL-level risk returned by the URL pipeline.
+  </Step>
+</Steps>
+
+## Risk scoring formula
+
+Once all engines have responded, the system applies the following formula:
+
+```
+risk_score = (total_positives / total_engines) × 100
+```
+
+`total_positives` is the sum of positive detections across all engines that returned a valid result. `total_engines` is the sum of scanners those engines reported. The heuristic classifier contributes 1 to both counts when it fires.
+
+The risk score maps to a severity level as follows:
+
+| Condition | Severity |
+|---|---|
+| `heuristic_alert = True` (any score) | CRITICAL |
+| `risk_score > 70` | CRITICAL |
+| `risk_score > 40` | HIGH |
+| `risk_score > 10` | MEDIUM |
+| `risk_score > 0` | LOW |
+| `risk_score = 0` | SAFE |
+
+## Performance
+
+A full analysis with all four engines active typically completes in **8–12 seconds** for previously unseen files and URLs. Cache hits resolve in under 500 ms.
+
+<AccordionGroup>
+  <Accordion title="VirusTotal polling details">
+    VirusTotal's v2 API returns `response_code: -2` while a scan is still queued. The system retries up to 12 times (URLs) or 18 times (files) with a 5-second delay between each attempt. HTTP 204 and 429 responses indicate quota exhaustion and are returned as an error without further retries.
+  </Accordion>
+  <Accordion title="MetaDefender polling details">
+    MetaDefender exposes a `progress_percentage` field in the scan result. The system polls until `progress_percentage == 100`, with a maximum of 12 attempts at 5-second intervals for files and 20 attempts at 3-second intervals for URLs.
+  </Accordion>
+  <Accordion title="Google Safe Browsing threat types">
+    The GSB request checks for `MALWARE`, `SOCIAL_ENGINEERING`, and `UNWANTED_SOFTWARE` across `ANY_PLATFORM`. A match on any of those threat types sets `safe: false` and escalates the result to `CRITICAL`.
+  </Accordion>
+  <Accordion title="Heuristic scoring for URLs">
+    A single suspicious keyword in an untrusted domain adds 1 point (MEDIUM). Two or more keywords add 3 points (CRITICAL). An IP-based URL adds 2 points (HIGH). A typosquatting domain adds 3 points (CRITICAL). Domains longer than 50 characters add 1 point. A total score of 1 or more sets `heuristic_alert: true`.
+  </Accordion>
+  <Accordion title="Heuristic scoring for files">
+    A dangerous extension alone adds 1 point (not enough to trigger an alert). A double extension (e.g., `report.pdf.exe`) adds 3 points (CRITICAL). Each social-engineering keyword in the filename adds 2 points (HIGH). A total score of 2 or more sets `heuristic_alert: true`.
+  </Accordion>
+</AccordionGroup>

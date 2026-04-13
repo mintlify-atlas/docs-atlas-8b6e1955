@@ -1,0 +1,175 @@
+---
+title: 'POST /api/incidents/analyze-url-preview/'
+description: 'Scan a URL with VirusTotal, MetaDefender, Google Safe Browsing, and a heuristic classifier. Returns a risk level with a Gemini AI explanation.'
+keywords: ['URL scan', 'VirusTotal', 'MetaDefender', 'Google Safe Browsing', 'phishing', 'risk level']
+---
+
+Asistente Web IA - Gestión de Incidentes provides this endpoint to check whether a URL is malicious before users interact with it. Four engines are consulted — VirusTotal, MetaDefender, Google Safe Browsing, and a local heuristic classifier — and Gemini AI produces a plain-language explanation of the findings.
+
+## Request
+
+**Method:** `POST`  
+**URL:** `/api/incidents/analyze-url-preview/`  
+**Authentication:** Required — `Authorization: Token <your-token>`  
+**Content-Type:** `application/json`
+
+<ParamField body="url" type="string" required>
+  The URL to analyze. If the value does not start with `http://` or `https://`, the prefix `https://` is added automatically before scanning.
+</ParamField>
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url https://your-host/api/incidents/analyze-url-preview/ \
+  --header 'Authorization: Token 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b' \
+  --header 'Content-Type: application/json' \
+  --data '{"url": "https://suspicious-site.example.com"}'
+```
+
+```python Python
+import requests
+
+HEADERS = {
+    "Authorization": "Token 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b",
+    "Content-Type": "application/json",
+}
+
+response = requests.post(
+    "https://your-host/api/incidents/analyze-url-preview/",
+    headers=HEADERS,
+    json={"url": "https://suspicious-site.example.com"},
+)
+print(response.json())
+```
+
+</CodeGroup>
+
+## Special behaviors
+
+### URL normalization
+
+If the submitted value does not begin with `http://` or `https://`, the server prepends `https://` before passing the URL to any engine. For example, `example.com` becomes `https://example.com`.
+
+### Input validation
+
+Random text, bare TLDs such as `.xyz`, or values without a recognizable domain structure are rejected immediately. The response is `risk_level: UNKNOWN` with a message asking the user to provide a valid domain.
+
+### 24-hour result cache
+
+The cache key is the MD5 hash of the normalized URL. If the same URL was analyzed within the last 24 hours, the cached result is returned without calling any external engine.
+
+## Response
+
+<ResponseField name="risk_level" type="string" required>
+  Overall threat classification. One of: `CRITICAL`, `MEDIUM`, `LOW`, `UNKNOWN`.
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Short human-readable verdict, e.g. `URL peligrosa`, `URL sospechosa`, or `URL segura`.
+</ResponseField>
+
+<ResponseField name="detail" type="string" required>
+  Additional context, such as the number of engines that completed the scan.
+</ResponseField>
+
+<ResponseField name="engines" type="array" required>
+  One entry per engine that returned a result.
+
+  <Expandable title="properties">
+    <ResponseField name="name" type="string">
+      Engine name: `VirusTotal`, `MetaDefender`, `Google Safe Browsing`, or `Clasificador Heurístico`.
+    </ResponseField>
+    <ResponseField name="positives" type="integer">
+      Number of engines within VirusTotal or MetaDefender that flagged the URL. Present for those two engines only.
+    </ResponseField>
+    <ResponseField name="total" type="integer">
+      Total antivirus engines consulted within VirusTotal or MetaDefender. Present for those two engines only.
+    </ResponseField>
+    <ResponseField name="detected" type="boolean">
+      `true` if the engine considers the URL malicious.
+    </ResponseField>
+    <ResponseField name="warning" type="boolean">
+      `true` when Google Safe Browsing returns a cautionary (non-definitive) match.
+    </ResponseField>
+    <ResponseField name="status_text" type="string">
+      Human-readable status. For Google Safe Browsing: `Seguro`, `Precaución`, or `Peligroso`. For the heuristic engine: a short description of detected patterns or `Sin patrones sospechosos`.
+    </ResponseField>
+    <ResponseField name="link" type="string">
+      URL to the engine's public report page, or `#` when unavailable.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="gemini_explicacion" type="string" required>
+  Gemini AI narrative explaining the combined threat findings.
+</ResponseField>
+
+<ResponseField name="gemini_recomendacion" type="string" required>
+  Gemini AI recommended remediation steps.
+</ResponseField>
+
+<ResponseField name="positives" type="integer" required>
+  Maximum positive count across all engines (`max_positives`).
+</ResponseField>
+
+<ResponseField name="total" type="integer" required>
+  Total antivirus engines summed across VirusTotal and MetaDefender results.
+</ResponseField>
+
+```json Example response
+{
+  "risk_level": "MEDIUM",
+  "message": "URL sospechosa",
+  "detail": "Analisis completado por 4 motores.",
+  "engines": [
+    {
+      "name": "VirusTotal",
+      "positives": 2,
+      "total": 90,
+      "detected": true,
+      "link": "https://www.virustotal.com/gui/url/abc123"
+    },
+    {
+      "name": "MetaDefender",
+      "positives": 0,
+      "total": 30,
+      "detected": false,
+      "link": "https://metadefender.opswat.com/results/url/xyz"
+    },
+    {
+      "name": "Google Safe Browsing",
+      "detected": false,
+      "warning": false,
+      "status_text": "Seguro",
+      "link": "https://transparencyreport.google.com/safe-browsing/search?url=https://suspicious-site.example.com"
+    },
+    {
+      "name": "Clasificador Heurístico",
+      "detected": false,
+      "status_text": "Sin patrones sospechosos",
+      "link": "#"
+    }
+  ],
+  "gemini_explicacion": "Dos motores de reputación detectaron esta URL como sospechosa...",
+  "gemini_recomendacion": "Evite ingresar credenciales en este sitio hasta confirmar su legitimidad.",
+  "positives": 2,
+  "total": 120
+}
+```
+
+## Risk mapping
+
+| Risk level | Condition                                                       |
+| ---------- | --------------------------------------------------------------- |
+| `CRITICAL` | `max_positives > 5`, or the heuristic classifier detected patterns |
+| `MEDIUM`   | `max_positives > 0` (and no CRITICAL condition met)             |
+| `LOW`      | `max_positives == 0` and heuristic clean                        |
+| `UNKNOWN`  | Input validation failed (invalid URL format)                    |
+
+## Error responses
+
+| Status | Condition                        | Response body                              |
+| ------ | -------------------------------- | ------------------------------------------ |
+| `400`  | `url` field missing from body    | `{"error": "No se proporciono URL"}`       |
+| `503`  | All engines returned errors      | `{"error": "Todos los motores fallaron"}`  |

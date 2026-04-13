@@ -1,0 +1,158 @@
+---
+title: 'Analyst guide: manage and resolve incidents'
+description: 'Manage all security incidents reported at Talleres Luis Mera: review statistics, update status, add internal notes, and export reports as CSV or monthly PDF.'
+keywords: ['analyst', 'incident management', 'status', 'CSV export', 'PDF report', 'notes', 'dashboard']
+---
+
+This guide covers everything analysts need to manage security incidents in **Asistente Web IA - Gestión de Incidentes**. As an analyst, you have access to all incidents reported across Talleres Luis Mera, a full statistics dashboard, and tools to update incident status, add notes, and export data.
+
+## Who this guide is for
+
+You are the workshop owner or a designated security analyst at Talleres Luis Mera. Unlike employees who can only submit and view their own incidents, you have visibility into every incident in the system and the tools to investigate and close them.
+
+## Accessing the analyst dashboard
+
+Log in with your analyst credentials. The system routes you automatically to the **CentroSOC** dashboard, which has a sidebar on the left and the main incident view on the right.
+
+Your username and an online status indicator appear in the sidebar under the Talleres Luis Mera logo.
+
+## Dashboard statistics
+
+At the top of the main content area, the **StatisticsCards** section gives you a real-time overview of the system. Statistics refresh automatically every 30 seconds. The cards include:
+
+- **Total incidents** recorded in the system
+- **Pending** incidents awaiting review
+- **Critical** incidents (risk level: CRITICAL)
+- Breakdowns by **incident type** (URL, file, image)
+- Breakdowns by **risk level** (CRITICAL, HIGH, MEDIUM, LOW, UNKNOWN)
+- Breakdowns by **status** (pending, investigating, resolved)
+
+## Viewing all incidents
+
+The incidents table below the statistics cards lists every incident in the system, sorted by most recent. Each row shows the incident ID, type, risk level, status, the employee who reported it, and the date.
+
+### Filtering and searching
+
+<Steps>
+  <Step title="Search by keyword">
+    Use the search box at the top of the toolbar to filter incidents in real time. The search matches against incident ID, description, risk level, type, URL, or attached file name.
+  </Step>
+  <Step title="Filter by type">
+    Use the **Tipos** dropdown to show only URL incidents, file incidents, or all types.
+  </Step>
+  <Step title="Filter by risk level">
+    Use the **Riesgo** dropdown to show only incidents of a specific risk level: CRITICAL, HIGH, MEDIUM, or LOW.
+  </Step>
+</Steps>
+
+Filters can be combined. The table updates immediately as you change any filter.
+
+## Viewing incident details
+
+<Steps>
+  <Step title="Click the view button">
+    In the incidents table, click the view (eye) icon on any row to open the **Incident Detail Modal**.
+  </Step>
+  <Step title="Review the full analysis breakdown">
+    The modal shows the complete analysis snapshot submitted by the employee, including:
+    - Risk level and overall verdict
+    - AI explanation from Gemini
+    - Per-engine results (VirusTotal, MetaDefender, Google Safe Browsing, heuristic classifier)
+    - Number of detections out of total engines scanned
+    - The original URL or attached file
+    - Employee description and any additional notes
+  </Step>
+  <Step title="Read existing analyst notes">
+    If any analyst notes have been added previously, they appear in a notes section within the modal.
+  </Step>
+</Steps>
+
+## Changing incident status
+
+Status transitions move an incident through its lifecycle from discovery to resolution.
+
+<Steps>
+  <Step title="Click the change state button">
+    In the incidents table, click the status-change button on any row to open the **Change State Modal**.
+  </Step>
+  <Step title="Select the new status">
+    Choose the target status from the available options.
+  </Step>
+  <Step title="Confirm the change">
+    Confirm the update. The table and statistics cards refresh to reflect the new status.
+  </Step>
+</Steps>
+
+<Note>
+Status transitions follow a one-way progression: **pending → investigating → resolved**. An incident starts as `pending` when an employee submits it. Move it to `investigating` when you begin reviewing it, and to `resolved` when the threat has been addressed or dismissed. The system does not enforce a strict order — you can set any status at any time — but following this sequence keeps the audit trail consistent.
+</Note>
+
+## Adding internal notes
+
+Internal notes let you document your findings, decisions, or instructions without the employee seeing them.
+
+<Steps>
+  <Step title="Open the incident detail modal">
+    Click the view icon on any incident row to open the detail modal.
+  </Step>
+  <Step title="Locate the notes section">
+    Scroll to the analyst notes area in the modal.
+  </Step>
+  <Step title="Write your note">
+    Type your note in the text field. Notes are stored against the incident and attributed to your username with a timestamp.
+  </Step>
+  <Step title="Save the note">
+    Submit the note. It appears immediately in the notes list for that incident.
+  </Step>
+</Steps>
+
+## Exporting incidents
+
+The toolbar above the incidents table has two export buttons.
+
+<Tabs>
+  <Tab title="Export as CSV">
+    <Steps>
+      <Step title="Apply filters if needed">
+        The CSV export respects the active **type** and **risk level** filters. Set these before exporting if you want a subset of incidents.
+      </Step>
+      <Step title="Click the CSV button">
+        Click the green **CSV** button in the toolbar. The file downloads automatically. The filename includes today's date: `incidentes_talleres_luis_mera_YYYY-MM-DD.csv`.
+      </Step>
+    </Steps>
+
+    Use CSV exports to work with incident data in spreadsheet tools or to share a filtered list with another team.
+  </Tab>
+  <Tab title="Generate monthly PDF report">
+    <Steps>
+      <Step title="Click the PDF Mensual button">
+        Click the red **PDF Mensual** button in the toolbar. No filters apply — this report always covers the full month.
+      </Step>
+      <Step title="Wait for the file to generate">
+        The server generates the PDF and the file downloads automatically. The filename includes today's date: `reporte_mensual_YYYY-MM-DD.pdf`.
+      </Step>
+    </Steps>
+
+    Use the monthly PDF for formal reporting, management review, or record-keeping.
+  </Tab>
+</Tabs>
+
+<Tip>
+Export a CSV with CRITICAL and HIGH filters applied at the end of each week as a quick summary of the most serious incidents for your records.
+</Tip>
+
+## Logging out
+
+Click **Cerrar Sesión** at the bottom of the sidebar to end your session. Your authentication token is cleared and you are redirected to the login page.
+
+<AccordionGroup>
+  <Accordion title="Why do the statistics not match the filtered table?">
+    The statistics cards always show totals for all incidents in the system, regardless of any filters applied to the table. This is by design — the overview cards give you the full picture even while you are focused on a subset.
+  </Accordion>
+  <Accordion title="Can I revert an incident status back to pending?">
+    Yes. The status change modal lets you select any status regardless of the current one. You can set a resolved incident back to investigating or pending if new information comes in.
+  </Accordion>
+  <Accordion title="How often do the statistics refresh?">
+    Statistics refresh automatically every 30 seconds. You can also trigger a manual refresh by navigating away and back, or by updating an incident status (which triggers a full data reload).
+  </Accordion>
+</AccordionGroup>

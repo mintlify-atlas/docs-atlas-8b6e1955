@@ -1,0 +1,87 @@
+---
+title: "Export incidents as PDF and CSV reports"
+description: "Download incident data as CSV or PDF from Asistente Web IA — covers the CSV export, single-incident PDF, and consolidated monthly PDF endpoints."
+---
+
+The **Asistente Web IA - Gestión de Incidentes** reporting endpoints allow analysts and administrators to export incident data in machine-readable CSV format or as formatted PDF documents. PDFs are generated server-side with the ReportLab library and include incident metadata, analysis results, and AI-generated explanations from Gemini.
+
+<Tip>
+  To open a report directly in your browser instead of saving it to disk, remove the `-o` flag from the curl examples below and pipe the output to a PDF viewer, or simply navigate to the endpoint URL while authenticated. For automated pipelines, use `-o filename.pdf` or `-o filename.csv` to save reliably.
+</Tip>
+
+---
+
+## GET /api/incidents/export/csv/
+
+Exports all incidents to a semicolon-delimited CSV file. Only accessible to analysts and administrators.
+
+The response includes a UTF-8 BOM so the file opens correctly in Microsoft Excel. Columns exported: `ID`, `Fecha Creacion`, `Usuario`, `Tipo`, `Objetivo`, `Estado`, `Riesgo`, `VT Detecciones`, `IA Recomendacion`, `OCR URLs Extraídas`.
+
+**Content-Type:** `text/csv`
+
+**Content-Disposition:** `attachment; filename="incidentes_YYYY-MM-DD.csv"`
+
+### Query parameters
+
+<ParamField query="type" type="string">
+  Filter by incident type. One of `url`, `file`, or `image`.
+</ParamField>
+
+<ParamField query="risk" type="string">
+  Filter by risk level. One of `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`, or `UNKNOWN`.
+</ParamField>
+
+<ParamField query="status" type="string">
+  Filter by workflow status. One of `pending`, `investigating`, or `resolved`.
+</ParamField>
+
+```bash curl
+curl --request GET \
+  --url 'https://your-backend.onrender.com/api/incidents/export/csv/?risk=CRITICAL' \
+  --header 'Authorization: Token YOUR_TOKEN' \
+  -o incidentes_criticos.csv
+```
+
+---
+
+## GET /api/incidents/\<id\>/pdf/
+
+Generates and downloads a single-incident PDF report. Accessible to any authenticated user, subject to the same incident-visibility rules as the detail endpoint (employees can only download reports for their own incidents).
+
+The PDF contains: incident metadata (ID, date, reporter, type, URL/file target, risk level, status), detection counts from VirusTotal and MetaDefender, and the Gemini AI explanation. For image incidents with an attached file, the image is embedded directly in the report.
+
+**Content-Type:** `application/pdf`
+
+**Content-Disposition:** `attachment; filename="reporte_incidente_<id>.pdf"`
+
+### Path parameters
+
+<ParamField path="id" type="integer" required>
+  The incident ID.
+</ParamField>
+
+```bash curl
+curl --request GET \
+  --url https://your-backend.onrender.com/api/incidents/42/pdf/ \
+  --header 'Authorization: Token YOUR_TOKEN' \
+  -o reporte_incidente_42.pdf
+```
+
+---
+
+## GET /api/incidents/report/pdf/monthly/
+
+Generates and downloads a consolidated monthly PDF report listing all incidents in the system, ordered by creation date ascending. Restricted to analysts and administrators.
+
+The report includes a summary table with columns: `ID`, `FECHA`, `USUARIO`, `TIPO`, `RIESGO`, `ESTADO`. Risk levels are color-coded in the PDF: red for CRITICAL/HIGH, orange for MEDIUM, green for SAFE.
+
+**Content-Type:** `application/pdf`
+
+**Content-Disposition:** `attachment; filename="reporte_mensual_YYYY-MM.pdf"`
+
+```bash curl
+curl --request GET \
+  --url https://your-backend.onrender.com/api/incidents/report/pdf/monthly/ \
+  --header 'Authorization: Token YOUR_TOKEN' \
+  -o reporte_mensual.pdf
+```

@@ -1,0 +1,139 @@
+---
+title: 'Administrator guide: manage users and system'
+description: 'Administer Asistente Web IA at Talleres Luis Mera: manage user accounts, assign roles, activate or deactivate access, and review the full security audit log.'
+keywords: ['administrator', 'user management', 'roles', 'activate account', 'deactivate account', 'audit log', 'login attempts']
+---
+
+This guide covers the administrator role in **Asistente Web IA - Gestión de Incidentes**. Administrators have every capability that analysts have, plus full control over user accounts, role assignments, and access to the security audit log for Talleres Luis Mera.
+
+## Who this guide is for
+
+You are a system administrator for the Talleres Luis Mera installation. You are responsible for managing who can access the system and in what capacity. You also monitor security through the login audit log.
+
+## What administrators can do
+
+Administrators have access to three tabs in the **AdminSOC** sidebar:
+
+- **Dashboard General** — the same incidents view and statistics available to analysts (see the [Analyst guide](/guides/analyst) for full details)
+- **Usuarios y Accesos** — view and manage all user accounts
+- **Auditoría de Seguridad** — review every login attempt recorded by the system
+
+## Viewing all user accounts
+
+<Steps>
+  <Step title="Click Usuarios y Accesos in the sidebar">
+    Select the **Usuarios y Accesos** tab. The main area shows a table of all registered user accounts.
+  </Step>
+  <Step title="Review the user list">
+    Each row shows the username, assigned role (employee, analyst, or admin), and account status (active or inactive).
+  </Step>
+</Steps>
+
+## Activating or deactivating user accounts
+
+<Warning>
+Deactivating an account blocks the user from logging in immediately. Any work that was in progress will be lost if they are mid-session. Make sure the user is not actively working before deactivating their account. If you deactivate the wrong account, you can re-enable it by toggling the status again.
+</Warning>
+
+<Steps>
+  <Step title="Open the Users and Access tab">
+    Navigate to **Usuarios y Accesos** from the sidebar.
+  </Step>
+  <Step title="Find the target user">
+    Locate the user account you want to activate or deactivate in the table.
+  </Step>
+  <Step title="Toggle the account status">
+    Click the toggle or status button on that user's row. The system sends a `PATCH` request to the `toggle_status` endpoint and immediately updates the user's active state.
+  </Step>
+  <Step title="Verify the change">
+    The user table reloads. Confirm the status column shows the new state for that account.
+  </Step>
+</Steps>
+
+<Tip>
+Deactivate accounts for employees who leave the workshop rather than deleting them. This preserves any incidents they reported while preventing future access.
+</Tip>
+
+## Changing user roles
+
+The system has three roles. Each grants a different level of access:
+
+| Role | Access |
+|---|---|
+| `employee` | Submit and analyze files/URLs; view own incidents only |
+| `analyst` | View and manage all incidents; export reports; add notes |
+| `admin` | Everything analysts can do, plus user management and audit log |
+
+<Steps>
+  <Step title="Open the Users and Access tab">
+    Navigate to **Usuarios y Accesos** from the sidebar.
+  </Step>
+  <Step title="Find the user to update">
+    Locate the account whose role you want to change.
+  </Step>
+  <Step title="Select the new role">
+    Use the role selector on that user's row to choose `employee`, `analyst`, or `admin`.
+  </Step>
+  <Step title="Confirm the change">
+    A confirmation dialog asks: **"¿Seguro que deseas cambiar el rol a [role]?"** Click confirm. The system sends a `PATCH` request to the `change_role` endpoint and reloads the user table.
+  </Step>
+</Steps>
+
+<Warning>
+Changing a user's role takes effect immediately. If you promote an employee to analyst or admin, they gain access to all incidents and user data the next time they navigate within the application. If you demote an analyst or admin to employee, they lose that access immediately.
+</Warning>
+
+## Viewing the login audit log
+
+The **Auditoría de Seguridad** tab shows a complete record of every login attempt made against the system. This data comes from the `LoginAttempt` model and includes:
+
+| Field | Description |
+|---|---|
+| **Username** | The username that was entered during the login attempt |
+| **IP address** | The originating IP address of the request |
+| **User agent** | The browser and operating system used |
+| **Result** | Whether the attempt was successful or failed |
+| **Timestamp** | The exact date and time of the attempt |
+
+<Steps>
+  <Step title="Click Auditoría de Seguridad in the sidebar">
+    Select the **Auditoría de Seguridad** tab. The log table loads automatically alongside the user and statistics data.
+  </Step>
+  <Step title="Review recent login activity">
+    Entries are sorted with the most recent at the top. Look for patterns such as repeated failed attempts from the same IP, or logins from unfamiliar locations.
+  </Step>
+  <Step title="Investigate suspicious entries">
+    If you see multiple failed attempts for a known username followed by a successful login, this may indicate a brute-force attack that succeeded. Cross-reference the IP address and timestamp, then consider deactivating that account and resetting the credentials.
+  </Step>
+</Steps>
+
+<Note>
+The audit log is read-only. Entries cannot be edited or deleted from the dashboard. All login attempts — both successful and failed — are recorded automatically by the system.
+</Note>
+
+## Managing incidents as an administrator
+
+Administrators have the same incident management capabilities as analysts, including:
+
+- Viewing all incidents and the full analysis breakdown for each
+- Changing incident status (pending → investigating → resolved)
+- Adding internal analyst notes to any incident
+- Exporting incidents as CSV (with filter support)
+- Generating monthly PDF reports
+
+See the [Analyst guide](/guides/analyst) for step-by-step instructions on these workflows.
+
+<AccordionGroup>
+  <Accordion title="What happens if I accidentally deactivate my own account?">
+    You will be blocked from logging in as soon as your session expires or you log out. To recover, another administrator must reactivate your account. Always ensure there is at least one other active admin account before making changes to your own.
+  </Accordion>
+  <Accordion title="Can I have multiple administrators?">
+    Yes. You can assign the `admin` role to any number of users. All administrators share the same level of access and can see and modify each other's actions.
+  </Accordion>
+  <Accordion title="Are role changes logged in the audit log?">
+    The audit log records login attempts only (both successful and failed). Role changes and status toggles are not currently written to the audit log, but they take effect immediately and are reflected in the user table.
+  </Accordion>
+  <Accordion title="How do I create a new user account?">
+    User account creation is handled outside the dashboard, typically through the Django admin interface or by your system developer. Once an account exists, you can manage its role and status from the Usuarios y Accesos tab.
+  </Accordion>
+</AccordionGroup>

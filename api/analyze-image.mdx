@@ -1,0 +1,186 @@
+---
+title: 'POST /api/incidents/analyze-image-preview/'
+description: 'POST endpoint for screenshot phishing detection using Gemini Vision. OCR extracts visible URLs and scans them with VirusTotal, MetaDefender, and Safe Browsing.'
+keywords: ['image analysis', 'phishing', 'Gemini Vision', 'OCR', 'screenshot', 'risk level']
+---
+
+Asistente Web IA - Gestión de Incidentes provides this endpoint to detect phishing and social-engineering threats in screenshots and other images. Gemini Vision examines the visual content for phishing indicators, optical character recognition (OCR) extracts any URLs visible in the image, and those URLs are then scanned with VirusTotal, MetaDefender, and Google Safe Browsing. The final risk level is the maximum of the image risk and the URL risk.
+
+<Note>
+  Only JPEG and PNG images are supported. Submitting any other format may produce unexpected results.
+</Note>
+
+## Request
+
+**Method:** `POST`  
+**URL:** `/api/incidents/analyze-image-preview/`  
+**Authentication:** Required — `Authorization: Token <your-token>`  
+**Content-Type:** `multipart/form-data`
+
+<ParamField body="file" type="file" required>
+  The image file to analyze. Must be a JPEG (`.jpg` / `.jpeg`) or PNG (`.png`) file, submitted as the multipart form field named `file`.
+</ParamField>
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url https://your-host/api/incidents/analyze-image-preview/ \
+  --header 'Authorization: Token 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b' \
+  --form 'file=@/path/to/screenshot.png'
+```
+
+```python Python
+import requests
+
+HEADERS = {"Authorization": "Token 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b"}
+
+with open("/path/to/screenshot.png", "rb") as f:
+    response = requests.post(
+        "https://your-host/api/incidents/analyze-image-preview/",
+        headers=HEADERS,
+        files={"file": f},
+    )
+
+print(response.json())
+```
+
+</CodeGroup>
+
+## How the analysis works
+
+<Steps>
+  <Step title="Gemini Vision inspection">
+    The image bytes are sent to Gemini Vision, which evaluates the visual content for phishing indicators such as fake login forms, urgency cues, brand impersonation, and suspicious design patterns. Gemini returns a risk level (`CRÍTICO`, `ALTO`, `MEDIO`, `BAJO`, or `SEGURO`) along with an explanation and any URLs it recognizes in the image.
+  </Step>
+  <Step title="OCR URL extraction">
+    URLs identified by Gemini in the image are collected. If any URLs are found, they are passed to the URL analysis pipeline.
+  </Step>
+  <Step title="URL scanning">
+    Each extracted URL is scanned with VirusTotal, MetaDefender, and Google Safe Browsing. The results are combined into additional engine entries in the response.
+  </Step>
+  <Step title="Risk escalation">
+    The final `risk_level` is the higher of the Gemini image risk and the URL scan risk. If the URL scan reveals a greater threat, the message is updated to reflect the phishing finding.
+  </Step>
+</Steps>
+
+### 24-hour result cache
+
+The SHA-256 hash of the uploaded image is the cache key. If the same image was analyzed within the last 24 hours, the cached result is returned immediately.
+
+## Response
+
+<ResponseField name="risk_level" type="string" required>
+  Overall threat classification. One of: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `SAFE`.
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Short human-readable verdict, e.g. `Captura Maliciosa (Phishing/Estafa)` or `Captura Segura`.
+</ResponseField>
+
+<ResponseField name="engines" type="array" required>
+  Engine results. Always includes one entry from Gemini Vision, plus additional entries for any URL engines that ran.
+
+  <Expandable title="properties">
+    <ResponseField name="name" type="string">
+      Engine name: `Inteligencia Artificial (Gemini Vision)`, `VirusTotal (URL Extraída)`, `MetaDefender (URL Extraída)`, or `Google Safe Browsing (URL Extraída)`.
+    </ResponseField>
+    <ResponseField name="detected" type="boolean">
+      `true` if the engine considers the content malicious or highly suspicious.
+    </ResponseField>
+    <ResponseField name="status_text" type="string">
+      Human-readable status returned by the engine.
+    </ResponseField>
+    <ResponseField name="positives" type="integer">
+      Number of detections reported by the engine. Present for VirusTotal and MetaDefender entries.
+    </ResponseField>
+    <ResponseField name="total" type="integer">
+      Total engines consulted within VirusTotal or MetaDefender. Present for those two engines only.
+    </ResponseField>
+    <ResponseField name="link" type="string">
+      URL to the engine's public report, or `#` when unavailable.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="gemini_explicacion" type="string" required>
+  Gemini AI narrative describing the visual threat indicators found in the image.
+</ResponseField>
+
+<ResponseField name="gemini_recomendacion" type="string" required>
+  Gemini AI recommended response steps.
+</ResponseField>
+
+<ResponseField name="positives" type="integer" required>
+  Total positive detections across all engines (Gemini + URL engines).
+</ResponseField>
+
+<ResponseField name="total" type="integer" required>
+  Total engine checks counted (Gemini counts as 1, plus URL engine totals).
+</ResponseField>
+
+<ResponseField name="extracted_urls" type="array" required>
+  List of URLs extracted from the image by Gemini's OCR. Empty array when no URLs were found.
+</ResponseField>
+
+```json Example response
+{
+  "risk_level": "CRITICAL",
+  "message": "Phishing Detectado (URL Maliciosa Extraída)",
+  "engines": [
+    {
+      "name": "Inteligencia Artificial (Gemini Vision)",
+      "detected": true,
+      "status_text": "CRÍTICO",
+      "link": "#"
+    },
+    {
+      "name": "VirusTotal (URL Extraída)",
+      "positives": 5,
+      "total": 90,
+      "detected": true,
+      "link": "https://www.virustotal.com/gui/url/abc123"
+    },
+    {
+      "name": "MetaDefender (URL Extraída)",
+      "positives": 1,
+      "total": 30,
+      "detected": true,
+      "link": "https://metadefender.opswat.com/results/url/xyz"
+    },
+    {
+      "name": "Google Safe Browsing (URL Extraída)",
+      "detected": true,
+      "warning": false,
+      "status_text": "Peligroso",
+      "link": "https://transparencyreport.google.com/safe-browsing/search?url=https://phishing.example.com"
+    }
+  ],
+  "gemini_explicacion": "La imagen muestra un formulario de inicio de sesión falso que suplanta a una entidad bancaria...",
+  "gemini_recomendacion": "No ingrese ninguna credencial. Reporte el sitio al equipo de seguridad.",
+  "positives": 7,
+  "total": 121,
+  "extracted_urls": ["https://phishing.example.com/login"]
+}
+```
+
+## Gemini risk level mapping
+
+Gemini Vision returns a risk label in Spanish. The endpoint maps these labels to the standard risk levels used across the API.
+
+| Gemini label        | API `risk_level` | Message                          |
+| ------------------- | ---------------- | -------------------------------- |
+| `CRÍTICO` / `CRITICO` | `CRITICAL`     | `Captura Maliciosa (Phishing/Estafa)` |
+| `ALTO`              | `HIGH`           | `Captura Sospechosa`             |
+| `MEDIO`             | `MEDIUM`         | `Posible Riesgo`                 |
+| `BAJO`              | `LOW`            | `Riesgo Mínimo`                  |
+| `SEGURO` (or any other value) | `SAFE` | `Captura Segura`               |
+
+If URLs are extracted and their scan result carries a higher risk than the Gemini image risk, the final `risk_level` is promoted to match the URL risk and the `message` is updated accordingly.
+
+## Error responses
+
+| Status | Condition                         | Response body                               |
+| ------ | --------------------------------- | ------------------------------------------- |
+| `400`  | No file attached to the request   | `{"error": "No se proporcionó imagen"}`    |
+| `500`  | Unhandled server-side exception   | `{"error": "<exception message>"}`          |

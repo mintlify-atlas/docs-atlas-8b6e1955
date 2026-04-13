@@ -1,0 +1,196 @@
+---
+title: 'Run the application with Docker Compose'
+description: 'How to build and run the full Asistente Web IA stack locally using Docker Compose, covering setup, container management, logs, migrations, and production tips.'
+keywords: ['docker', 'docker compose', 'containers', 'local development', 'deployment']
+---
+
+Asistente Web IA - Gestión de Incidentes ships with Dockerfiles for both the Django backend and the React frontend, plus a `docker-compose.yml` that wires them together into a single-command local stack. This page covers how to build, run, inspect, and stop the containers, as well as considerations for moving to a production deployment.
+
+## Prerequisites
+
+Before running Docker Compose, ensure the following tools are installed:
+
+- **Docker Desktop** (Mac/Windows) or **Docker Engine + Docker Compose plugin** (Linux) — [docs.docker.com/get-docker](https://docs.docker.com/get-docker/)
+- **Docker Compose** v2 or later (included in Docker Desktop; on Linux install with `apt install docker-compose-plugin`)
+
+Verify both are available:
+
+```bash
+docker --version
+docker compose version
+```
+
+## Step-by-step setup
+
+<Steps>
+  <Step title="Configure environment variables">
+    The backend reads its configuration from `backend/.env`. Create it from the example file:
+
+    ```bash
+    cp backend/.env.example backend/.env
+    ```
+
+    Open `backend/.env` in your editor and fill in real values for all API keys and the Django secret key. The `docker-compose.yml` passes this file to the backend container using `env_file: ./backend/.env`, so the container inherits every variable you define there.
+
+    See [Obtain API keys](/configuration/api-keys) for instructions on getting each key, and [Environment variables reference](/configuration/environment-variables) for the full variable list.
+  </Step>
+
+  <Step title="Build and start the containers">
+    From the project root directory, run:
+
+    ```bash
+    docker-compose up --build -d
+    ```
+
+    - `--build` forces Docker to rebuild both images from their Dockerfiles. Omit this flag on subsequent runs when the source code has not changed.
+    - `-d` runs the containers in detached mode (background). Remove it to stream logs directly to your terminal instead.
+
+    Docker builds the backend image first (Python 3.11-slim, installs `requirements.txt`, copies source), then the frontend image (Node 18-slim, runs `npm install`, copies source). The frontend container waits for the backend to start (`depends_on: backend`).
+  </Step>
+
+  <Step title="Verify the containers are running">
+    ```bash
+    docker-compose ps
+    ```
+
+    You should see two containers with status `Up`:
+
+    | Name | Image | Ports |
+    |------|-------|-------|
+    | `soc_backend` | built from `./backend` | `0.0.0.0:8000→8000/tcp` |
+    | `soc_frontend` | built from `./frontend` | `0.0.0.0:3000→3000/tcp` |
+
+    Once both containers are running:
+    - **Frontend:** [http://localhost:3000](http://localhost:3000)
+    - **Backend API:** [http://localhost:8000](http://localhost:8000)
+
+    The frontend container sets `REACT_APP_API_URL=http://localhost:8000` so it automatically points to the local backend.
+  </Step>
+
+  <Step title="Stop the containers">
+    ```bash
+    docker-compose down
+    ```
+
+    This stops and removes the containers but preserves the built images. To also remove volumes:
+
+    ```bash
+    docker-compose down --volumes
+    ```
+  </Step>
+</Steps>
+
+## What each container does
+
+### Backend (`soc_backend`)
+
+Built from `backend/Dockerfile`:
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+RUN apt-get update && apt-get install -y gcc && rm -rf /var/lib/apt/lists/*
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+EXPOSE 8000
+CMD ["sh", "-c", "python manage.py migrate --run-syncdb && python manage.py runserver 0.0.0.0:8000"]
+```
+
+On startup, the container automatically runs `python manage.py migrate --run-syncdb` to apply all database migrations before starting the development server. The SQLite database file (`db.sqlite3`) is stored inside the container at `/app/db.sqlite3`. Because the `docker-compose.yml` mounts `./backend:/app` as a volume, the database file persists on your host machine between container restarts.
+
+### Frontend (`soc_frontend`)
+
+Built from `frontend/Dockerfile`:
+
+```dockerfile
+FROM node:18-slim
+
+WORKDIR /app
+COPY package*.json .
+RUN npm install
+COPY . .
+EXPOSE 3000
+CMD ["npm", "start"]
+```
+
+Runs the React development server on port 3000. The `node_modules` directory is preserved inside the container via an anonymous volume (`/app/node_modules`) so that the bind-mounted source code does not overwrite the installed packages.
+
+## Checking logs
+
+Stream live logs from the backend:
+
+```bash
+docker-compose logs -f backend
+```
+
+Stream live logs from the frontend:
+
+```bash
+docker-compose logs -f frontend
+```
+
+Stream both at once:
+
+```bash
+docker-compose logs -f
+```
+
+Press `Ctrl+C` to stop following logs without stopping the containers.
+
+## Running database migrations manually
+
+The backend runs migrations automatically on startup, but if you need to apply new migrations after updating the code without rebuilding:
+
+```bash
+docker-compose exec backend python manage.py migrate
+```
+
+To create a Django superuser inside the running container:
+
+```bash
+docker-compose exec backend python manage.py createsuperuser
+```
+
+To open a Django shell:
+
+```bash
+docker-compose exec backend python manage.py shell
+```
+
+## Production considerations
+
+<Warning>
+The backend Dockerfile's default command uses `runserver`, which is Django's **development** server. It is single-threaded, not hardened, and not suitable for internet-facing traffic. For production, replace the `CMD` with a proper WSGI server such as Gunicorn:
+
+```bash
+gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3
+```
+
+The `render.yaml` in the repository shows the correct Gunicorn command used for Render.com deployments.
+</Warning>
+
+<Warning>
+Always set `DEBUG=False` in production. With `DEBUG=True`, Django exposes full tracebacks, installed apps, settings values, and local variables to anyone who triggers an error response. It also disables certain security headers. Set it explicitly in `backend/.env` or your hosting platform's environment dashboard.
+</Warning>
+
+Additional production steps to consider:
+
+- **Replace SQLite with PostgreSQL.** SQLite is suitable for local development and small single-server deployments, but PostgreSQL handles concurrent writes correctly and is recommended for any multi-user production workload.
+- **Serve static files separately.** Run `python manage.py collectstatic` and serve the output directory through Nginx or a CDN rather than Django.
+- **Set `ALLOWED_HOSTS` explicitly.** `settings.py` currently sets `ALLOWED_HOSTS = ["*"]` for the production override block. Replace this with your actual domain(s) once the deployment URL is known.
+- **Use named volumes for the database.** Replace the bind-mount volume with a named Docker volume so that the database is not tied to a specific host path.
+
+<Note>
+The `render.yaml` file in the repository defines a fully configured Render.com deployment for both services, including automatic `SECRET_KEY` generation, environment variable injection, and a static site build for the frontend. If you are deploying to Render, no Docker Compose setup is needed — push to your repository and Render builds and deploys both services automatically.
+</Note>
+
+<CardGroup cols={2}>
+  <Card title="Environment variables reference" icon="file-lines" href="/configuration/environment-variables">
+    Every variable the backend reads from .env, with types, defaults, and security notes.
+  </Card>
+  <Card title="Obtain API keys" icon="key" href="/configuration/api-keys">
+    Step-by-step guide to getting free API keys for all four security services.
+  </Card>
+</CardGroup>

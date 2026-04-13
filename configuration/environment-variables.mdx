@@ -1,0 +1,97 @@
+---
+title: 'Environment variables reference'
+description: 'Complete reference for all environment variables used by Asistente Web IA: SECRET_KEY, DEBUG, CORS origins, and four external security API keys.'
+keywords: ['environment variables', 'configuration', 'django settings', 'dotenv', 'api keys']
+---
+
+Asistente Web IA - Gestión de Incidentes reads its runtime configuration from a `.env` file placed inside the `backend/` directory. This page documents every variable the application reads, its expected values, and whether it is required for the system to start correctly.
+
+## Setting up the .env file
+
+Copy the provided example file and fill in real values before starting the backend:
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+The complete contents of `backend/.env.example` are:
+
+```env backend/.env.example
+SECRET_KEY=your-secret-key-here
+DEBUG=False
+CORS_ALLOWED_ORIGINS=http://localhost:3000,https://TU-APP-FRONTEND.onrender.com
+VIRUSTOTAL_API_KEY=your-key
+METADEFENDER_API_KEY=your-key
+GOOGLE_API_KEY=your-key
+GOOGLE_SAFE_BROWSING_KEY=your-key
+```
+
+<Note>
+  The `.env.example` above is shown verbatim. In practice, the Gemini service reads `GEMINI_API_KEY` (not `GOOGLE_API_KEY`). Set `GEMINI_API_KEY` in your `.env` with your Gemini API key value. The Google Safe Browsing service reads `GOOGLE_SAFE_BROWSING_API_KEY` first, then falls back to `GEMINI_API_KEY` if that is not set.
+</Note>
+
+<Warning>
+Never commit your `.env` file to version control. It is already listed in `.gitignore`, but double-check before pushing. Leaking `SECRET_KEY` or any API key compromises both your Django installation and your API quotas.
+</Warning>
+
+## Variable reference
+
+### Django core
+
+<ParamField path="SECRET_KEY" type="string" required>
+  The Django cryptographic signing key. Used to protect sessions, CSRF tokens, and password reset links. Must be long, random, and unique per deployment. The application falls back to an insecure development default if this is not set — never rely on the default in production.
+</ParamField>
+
+<ParamField path="DEBUG" type="boolean" default="False">
+  Controls Django's debug mode. Set to `True` during local development to see detailed error pages with tracebacks. Must be `False` in any internet-facing environment because debug mode exposes full stack traces and settings values to anyone who triggers an error.
+</ParamField>
+
+<ParamField path="CORS_ALLOWED_ORIGINS" type="string">
+  Comma-separated list of origins that browsers are allowed to make cross-origin requests from. In `settings.py` this string is split on commas and loaded into both `CORS_ALLOWED_ORIGINS` and `CSRF_TRUSTED_ORIGINS`. Example value for a local setup plus a Render deployment:
+
+  ```
+  CORS_ALLOWED_ORIGINS=http://localhost:3000,https://your-frontend.onrender.com
+  ```
+
+  Origins must include the scheme (`http://` or `https://`). The hardcoded defaults in `settings.py` already include `http://localhost:3000` and `http://localhost:3001` for local development.
+</ParamField>
+
+### External security APIs
+
+<ParamField path="VIRUSTOTAL_API_KEY" type="string" required>
+  API key for the [VirusTotal](https://www.virustotal.com) file and URL scanning service. The backend uses VirusTotal API v2 to submit files and URLs and retrieve scan results from 68+ antivirus engines. Without this key, file analysis will not produce VirusTotal results.
+</ParamField>
+
+<ParamField path="METADEFENDER_API_KEY" type="string" required>
+  API key for [MetaDefender Cloud](https://metadefender.opswat.com) (OPSWAT). Used to perform multi-engine file analysis as a second opinion alongside VirusTotal. Without this key, MetaDefender results will be missing from incident reports.
+</ParamField>
+
+<ParamField path="GOOGLE_SAFE_BROWSING_KEY" type="string" required>
+  API key for the [Google Safe Browsing](https://developers.google.com/safe-browsing) v4 API. Used to check whether URLs appear on Google's lists of known phishing, malware, and unwanted software sites. In `settings.py` this is read from the `GOOGLE_SAFE_BROWSING_API_KEY` environment variable name; if that variable is absent, the backend falls back to the value of `GOOGLE_API_KEY` (the Gemini key), since both come from the same Google Cloud project.
+</ParamField>
+
+<ParamField path="GEMINI_API_KEY" type="string" required>
+  API key for [Google Gemini](https://aistudio.google.com) (Generative AI). The application uses Gemini 2.5 Flash to generate plain-language explanations of scan results so that non-technical staff can understand whether a file or URL is dangerous. The `GeminiService` class reads this variable directly via `config('GEMINI_API_KEY')`. Without this key, AI-generated summaries will not be produced and the system falls back to rule-based explanations.
+
+  <Note>
+    The `.env.example` file uses the name `GOOGLE_API_KEY` as a placeholder, but the backend code reads `GEMINI_API_KEY`. Use `GEMINI_API_KEY` as the variable name in your `.env` file.
+  </Note>
+</ParamField>
+
+## Generating a secure SECRET\_KEY
+
+<Tip>
+Run the following one-liner to generate a cryptographically strong secret key using Django's own utility. Copy the output directly into your `.env` file.
+
+```bash
+python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+```
+
+You do not need an active virtual environment with a full Django project for this command — any Python installation with `django` available will work.
+</Tip>
+
+## How settings.py reads these variables
+
+`settings.py` uses `python-decouple` (`config()`) with an explicit `load_dotenv(..., override=True)` call at the top of the file. The `override=True` flag ensures that the `.env` file always wins over OS-level environment variables, which prevents stale values cached in the Windows registry from interfering with local development.
+
+A second block at the bottom of `settings.py` reads the same variables directly from `os.environ` to support Render.com deployments where environment variables are injected by the platform rather than a file. When deploying to Render, set all variables in the Render dashboard under **Environment** — no `.env` file is needed.

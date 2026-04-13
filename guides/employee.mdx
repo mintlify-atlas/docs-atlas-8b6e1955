@@ -1,0 +1,155 @@
+---
+title: 'Employee guide: scan files and report incidents'
+description: 'Learn how to use Asistente Web IA to scan suspicious files, URLs, and images, understand risk levels, and report security incidents at Talleres Luis Mera.'
+keywords: ['employee', 'incident reporting', 'file scan', 'URL scan', 'phishing detection', 'risk level']
+---
+
+This guide is for workshop employees at Talleres Luis Mera who use **Asistente Web IA - Gestión de Incidentes** to check suspicious files or links and report potential security threats. No technical experience is required — the system does the analysis for you.
+
+## Who this guide is for
+
+You are an employee at Talleres Luis Mera. Your job in the security system is simple: if you receive a suspicious email, find a strange file, or come across a link you don't trust, you submit it here. The AI engine checks it and tells you whether it is safe or dangerous. If it looks dangerous, you report it with one click.
+
+## How to log in
+
+<Steps>
+  <Step title="Open the application">
+    Open the application in your web browser and go to the login page.
+  </Step>
+  <Step title="Enter your credentials">
+    Type your username and password in the fields provided.
+  </Step>
+  <Step title="Click Sign In">
+    Click the sign-in button. If your credentials are correct and your account is active, the system will take you directly to the **Centro de Seguridad** (Security Center) dashboard.
+  </Step>
+</Steps>
+
+<Tip>
+If you see an error message after signing in, your account may be inactive. Contact your administrator to have it re-enabled.
+</Tip>
+
+## Analyzing something suspicious
+
+The Security Center has two main analysis modes, shown as tabs at the top of the left panel: **Analizar Enlace** (Analyze Link) and **Analizar Archivo / Imagen** (Analyze File / Image). Choose the one that matches what you want to check.
+
+<Tabs>
+  <Tab title="Analyze a suspicious URL">
+    Use this when you receive a suspicious link in an email, chat message, or website.
+
+    <Steps>
+      <Step title="Select Analizar Enlace">
+        Click the **Analizar Enlace** tab at the top of the panel. It will highlight in blue when active.
+      </Step>
+      <Step title="Paste or type the URL">
+        Click inside the text box labeled **Buscar o Escanear URL** and paste or type the link. The system starts analyzing automatically after about one second once you stop typing — you do not need to press any button.
+      </Step>
+      <Step title="Wait for the result">
+        A spinning indicator appears on the right panel while the system queries global threat databases (VirusTotal, MetaDefender, Google Safe Browsing, and Gemini AI). This usually takes a few seconds.
+      </Step>
+      <Step title="Read the result">
+        When the analysis is complete, the right panel shows a colored risk card, an AI explanation, and a breakdown by each scanning engine.
+      </Step>
+    </Steps>
+
+    <Tip>
+      Do not click suspicious links before pasting them here. Copy the link address directly from the email or message without opening it.
+    </Tip>
+  </Tab>
+  <Tab title="Analyze a suspicious file">
+    Use this when you receive a file attachment (PDF, Word document, executable, ZIP, etc.) that you are not sure is safe.
+
+    <Steps>
+      <Step title="Select Analizar Archivo / Imagen">
+        Click the **Analizar Archivo / Imagen** tab. It will highlight in blue.
+      </Step>
+      <Step title="Upload the file">
+        Either click the upload area and choose the file from your computer, or drag the file directly onto the dashed box. Supported formats include PDF, DOCX, EXE, and ZIP.
+      </Step>
+      <Step title="Click Analizar Riesgo">
+        Once the file name appears in the panel, click the **Analizar Riesgo** button on the right side. The system will scan the file contents.
+      </Step>
+      <Step title="Wait for the result">
+        The right panel shows a loading spinner while the file is being scanned. Results appear within a few seconds.
+      </Step>
+    </Steps>
+
+    <Tip>
+      Never open a suspicious file on your computer before scanning it here. Upload it directly from wherever you saved or downloaded it.
+    </Tip>
+  </Tab>
+  <Tab title="Analyze a screenshot or image">
+    Use this when you receive a screenshot of a suspicious message, a photo of a QR code, or any image that may contain phishing content.
+
+    <Steps>
+      <Step title="Select Analizar Archivo / Imagen">
+        Click the **Analizar Archivo / Imagen** tab.
+      </Step>
+      <Step title="Upload the image">
+        Click the upload area or drag your image (PNG, JPG, or JPEG) onto the dashed box. The system automatically detects that you uploaded an image and switches to image analysis mode.
+      </Step>
+      <Step title="Click Analizar Riesgo">
+        Click the **Analizar Riesgo** button. The Gemini AI engine reads the text and visual content of the image to detect phishing attempts.
+      </Step>
+      <Step title="Read the result">
+        The right panel shows the risk level and an AI explanation of what was found in the image.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Understanding the risk color
+
+After any analysis, a colored card appears in the right panel showing the overall risk level. Here is what each color means:
+
+| Color | Level | What it means |
+|---|---|---|
+| Red | **CRITICAL** | Confirmed threat. Do not interact with this file or link. Report it immediately. |
+| Orange | **HIGH** | High probability of danger. Treat it as malicious and report it. |
+| Yellow | **MEDIUM** | Something suspicious was detected. Use caution and consider reporting it. |
+| Green | **LOW** or **SAFE** | Little or no threat detected. The item appears to be safe. |
+| Gray | **UNKNOWN** | The system could not determine the risk. When in doubt, report it. |
+
+The right panel also shows a pie chart with the number of scanning engines that flagged the item (for example, "3/67 engines"), followed by a plain-language AI explanation of what was found.
+
+<Note>
+A result of SAFE or LOW does not guarantee the item is harmless. If something still feels wrong to you, create an incident report anyway. Your analyst can review it.
+</Note>
+
+## Creating an incident report
+
+After the analysis completes, you can send a formal incident report with a single click.
+
+<Steps>
+  <Step title="Review the result">
+    Read the risk level and AI explanation in the right panel to understand what was found.
+  </Step>
+  <Step title="Add optional notes">
+    In the left panel, there is a text area labeled **Notas adicionales (Opcional)**. You can type a short description of how you received the suspicious item — for example, "received in email from unknown sender" or "found on a USB drive." This helps the analyst understand the context.
+  </Step>
+  <Step title="Click Generar Incidente">
+    A green **Generar Incidente** button appears at the bottom of the left panel after the analysis completes. Click it to send the report.
+  </Step>
+  <Step title="Confirm submission">
+    A green notification at the top of the screen confirms that the report was submitted: **"¡Reporte Enviado! El incidente ha sido registrado exitosamente."** The form resets and you can analyze another item.
+  </Step>
+</Steps>
+
+<Tip>
+You should create an incident report for any result that is CRITICAL, HIGH, or MEDIUM, or for any UNKNOWN result that came from an unexpected or untrusted source.
+</Tip>
+
+## Viewing your incident history
+
+Your submitted incidents are stored in the system and reviewed by the analyst. After submitting a report, the form clears and you can submit another one. Contact your analyst or administrator if you need to check the status of a previous report.
+
+<AccordionGroup>
+  <Accordion title="What happens after I submit a report?">
+    The analyst receives your report and can see the full analysis snapshot you submitted. They will review it and may change its status from **Pending** to **Investigating** or **Resolved**. You do not need to do anything else unless the analyst contacts you for more information.
+  </Accordion>
+  <Accordion title="What if the upload or analysis fails?">
+    If an error notification appears (red banner at the top), try again. If the problem continues, let your administrator know. Do not try to open or interact with the suspicious file or link in the meantime.
+  </Accordion>
+  <Accordion title="Can I remove a file I uploaded by mistake?">
+    Yes. While the file is shown in the upload area (before you click Analizar Riesgo), click the X button next to the file name to remove it. You can then upload a different file.
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,112 @@
+---
+title: 'Incident lifecycle: from detection to resolution'
+description: 'How Asistente Web IA tracks security incidents from submission to resolution, with role-based access, status lifecycle, analyst notes, and CSV and PDF export.'
+keywords: ['incident management', 'incident lifecycle', 'status tracking', 'analyst notes', 'CSV export', 'PDF report', 'role-based access']
+---
+
+Asistente Web IA - Gestión de Incidentes treats every analysis result as a security incident with a defined lifecycle. From the moment a file is scanned to the point an analyst closes the case, every state change is logged, searchable, and exportable.
+
+## Incident data model
+
+Each incident is stored in the `Incident` database model with the following fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `incident_type` | string | `url`, `file`, or `image` |
+| `risk_level` | string | `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`, or `UNKNOWN` |
+| `status` | string | `pending`, `investigating`, or `resolved` |
+| `url` | URL | The submitted URL, if applicable |
+| `attached_file` | file | Uploaded file stored under `incidents/` |
+| `description` | text | Free-text description provided at submission |
+| `analysis_result` | JSON | Full snapshot of all engine results at analysis time |
+| `virustotal_result` | JSON | Raw VirusTotal response |
+| `metadefender_result` | JSON | Raw MetaDefender response |
+| `gemini_analysis` | text | Gemini AI explanation text |
+| `analyst_notes` | text | Internal notes field for analysts |
+| `reported_by` | FK → User | The user who submitted the resource |
+| `created_at` | datetime | Set automatically on creation |
+| `updated_at` | datetime | Updated automatically on every save |
+
+The `analysis_result` field stores a complete JSON snapshot of the analysis at the time of submission. This means the incident record is self-contained: even if API responses change over time, the original findings are preserved.
+
+## Status lifecycle
+
+Incidents follow a linear three-stage workflow:
+
+<Steps>
+  <Step title="Pending">
+    The incident is created automatically when an analysis completes. No analyst has reviewed it yet. This is the default status (`pending`).
+  </Step>
+  <Step title="Investigating">
+    An analyst has opened the incident and is actively reviewing the analysis data, adding notes, or requesting additional information from the reporting user. Status is updated to `investigating`.
+  </Step>
+  <Step title="Resolved">
+    The analyst has reached a conclusion—either confirming the threat, ruling it a false positive, or taking remediation action. Status is set to `resolved`.
+  </Step>
+</Steps>
+
+When an analyst changes the status, they can include a comment. That comment is automatically saved as an internal note in the `IncidentNote` model, creating an immutable audit trail of who changed what and when.
+
+## How incidents are created
+
+<Tabs>
+  <Tab title="From file analysis">
+    Submitting a file to `/api/incidents/analyze-file-preview/` runs VirusTotal, MetaDefender, and the Heuristic Classifier in parallel. When the analysis completes, an `Incident` record is created with `incident_type: "file"`, the computed `risk_level`, and the full engine result snapshot stored in `analysis_result`.
+  </Tab>
+  <Tab title="From URL analysis">
+    Submitting a URL to `/api/incidents/analyze-url-preview/` runs all four engines. The resulting `Incident` record stores the normalized URL and the complete engine results, including the Google Safe Browsing verdict and the heuristic patterns detected.
+  </Tab>
+  <Tab title="From image analysis">
+    Submitting an image to `/api/incidents/analyze-image-preview/` triggers Gemini Vision OCR. If URLs are extracted from the image, those are also scanned. The `Incident` record is created with `incident_type: "image"` and stores both the image-level Gemini result and the URL-level engine results if applicable.
+  </Tab>
+</Tabs>
+
+## Role-based visibility
+
+Access to incident records depends on the user's role:
+
+| Role | Visible incidents |
+|---|---|
+| Employee | Only their own incidents (`reported_by = current user`) |
+| Analyst | All incidents from all users |
+| Admin | All incidents from all users |
+
+Analysts and admins can also create `IncidentNote` records on any incident. Employees cannot create notes.
+
+## Filtering and search
+
+The incident list supports the following filter parameters:
+
+- **Type** — filter by `url`, `file`, or `image`
+- **Risk level** — filter by `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`, or `UNKNOWN`
+- **Status** — filter by `pending`, `investigating`, or `resolved`
+- **Date range** — filter by `created_at` start and end dates
+- **Text search** — full-text search across description and URL fields
+
+Results are paginated at **200 records per page**, ordered by `created_at` descending (newest first).
+
+## Notes system
+
+The `IncidentNote` model stores analyst commentary attached to an incident:
+
+| Field | Description |
+|---|---|
+| `incident` | FK to the parent `Incident` |
+| `author` | FK to the `User` who wrote the note |
+| `content` | Free-text note body |
+| `created_at` | Set automatically, immutable |
+
+Notes are ordered by `created_at` descending. Only users with the analyst or admin role can create notes. Status-change comments are saved as notes automatically, so the full decision history is always visible in the notes thread.
+
+## Export formats
+
+Analysts and admins can export incident data in two formats:
+
+<CardGroup cols={2}>
+  <Card title="CSV export" icon="file-spreadsheet" href="/api/incident-reports">
+    Exports all filtered incidents as a comma-separated file using Python's built-in `csv` module. Suitable for loading into spreadsheet tools or SIEM systems.
+  </Card>
+  <Card title="PDF report" icon="file-text" href="/api/incident-reports">
+    Generates a formatted PDF report using ReportLab's `SimpleDocTemplate` with tables, styled paragraphs, and the organization logo. Designed for management briefings and regulatory documentation.
+  </Card>
+</CardGroup>

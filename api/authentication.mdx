@@ -1,0 +1,121 @@
+---
+title: 'Authenticate API requests with token auth'
+description: 'How to obtain a DRF Token for Asistente Web IA, include it in the Authorization header, and handle authentication errors across all protected endpoints.'
+keywords: ['authentication', 'token', 'DRF', 'login', 'API key']
+---
+
+Asistente Web IA - Gestión de Incidentes secures every API endpoint with Django REST Framework (DRF) Token Authentication. This page explains how to obtain a token for a user account and how to include that token in subsequent requests.
+
+## Obtaining a token
+
+Send a `POST` request to `/api/auth/token/` with a valid username and password. The server validates the credentials, creates or retrieves a persistent token, and returns it alongside basic user information.
+
+<ParamField body="username" type="string" required>
+  The account username.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The account password.
+</ParamField>
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url https://your-host/api/auth/token/ \
+  --header 'Content-Type: application/json' \
+  --data '{"username": "analista", "password": "analista123"}'
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    "https://your-host/api/auth/token/",
+    json={"username": "analista", "password": "analista123"},
+)
+data = response.json()
+token = data["token"]
+```
+
+</CodeGroup>
+
+### Response
+
+A successful request returns HTTP `200` with the following fields.
+
+<ResponseField name="token" type="string" required>
+  The authentication token to include in subsequent requests.
+</ResponseField>
+
+<ResponseField name="user_id" type="integer" required>
+  The numeric primary key of the authenticated user.
+</ResponseField>
+
+<ResponseField name="username" type="string" required>
+  The username of the authenticated account.
+</ResponseField>
+
+<ResponseField name="role" type="string" required>
+  The role assigned to the user. Possible values: `admin`, `analyst`, `employee`.
+</ResponseField>
+
+```json Example response
+{
+  "token": "9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b",
+  "user_id": 3,
+  "username": "analista",
+  "role": "analyst"
+}
+```
+
+## Using the token
+
+Include the token in the `Authorization` header of every request that requires authentication. The format is `Token <your-token>` (note: `Token`, not `Bearer`).
+
+<CodeGroup>
+
+```bash curl
+curl --request POST \
+  --url https://your-host/api/incidents/analyze-url-preview/ \
+  --header 'Authorization: Token 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b' \
+  --header 'Content-Type: application/json' \
+  --data '{"url": "https://example.com"}'
+```
+
+```python Python
+import requests
+
+HEADERS = {"Authorization": "Token 9944b09199c62bcf9418ad846dd0e4bbdfc6ee4b"}
+
+response = requests.post(
+    "https://your-host/api/incidents/analyze-url-preview/",
+    headers=HEADERS,
+    json={"url": "https://example.com"},
+)
+print(response.json())
+```
+
+</CodeGroup>
+
+## Test credentials
+
+The following accounts are pre-seeded for development and testing.
+
+| Username   | Password      | Role       |
+| ---------- | ------------- | ---------- |
+| `admin`    | `admin123`    | `admin`    |
+| `analista` | `analista123` | `analyst`  |
+| `empleado` | `empleado123` | `employee` |
+
+<Warning>
+  Never use these test credentials in a production environment. They are publicly documented and provide no security.
+</Warning>
+
+## Error responses
+
+| Status | Condition                                              | Response body                                    |
+| ------ | ------------------------------------------------------ | ------------------------------------------------ |
+| `400`  | Invalid username or password                           | `{"non_field_errors": ["Credenciales invalidas"]}` |
+| `401`  | Request made without an `Authorization` header         | DRF default unauthorized response                |
+| `403`  | Token is valid but the user lacks the required role    | DRF default forbidden response                   |

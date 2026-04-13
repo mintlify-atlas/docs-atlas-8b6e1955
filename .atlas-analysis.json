@@ -1,0 +1,119 @@
+{
+  "projectType": "saas",
+  "projectName": "Asistente Web IA - Gestión de Incidentes",
+  "projectDescription": "A full-stack web application that uses AI and multiple security APIs to analyze suspicious files and URLs for cybersecurity threats, with role-based incident management for non-technical users.",
+  "theme": "aspen",
+  "primaryColor": "#1a3a5c",
+  "lightColor": "#2563eb",
+  "darkColor": "#0f2440",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "deployment"
+            ]
+          },
+          {
+            "group": "User Guides",
+            "pages": [
+              "guides/employee",
+              "guides/analyst",
+              "guides/administrator"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/threat-analysis",
+              "features/incident-management",
+              "features/ai-assistant",
+              "features/caching"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/environment-variables",
+              "configuration/api-keys",
+              "configuration/docker"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": [
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Analysis",
+            "pages": [
+              "api/analyze-file",
+              "api/analyze-url",
+              "api/analyze-image"
+            ]
+          },
+          {
+            "group": "Incidents",
+            "pages": [
+              "api/incidents-overview",
+              "api/incidents-crud",
+              "api/incident-notes",
+              "api/incident-reports"
+            ]
+          },
+          {
+            "group": "Administration",
+            "pages": [
+              "api/users",
+              "api/stats"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multi-engine threat analysis using VirusTotal, MetaDefender, and Google Safe Browsing APIs",
+    "AI-powered explanations via Google Gemini 2.5 Flash translating technical results to plain language",
+    "Image phishing detection with OCR-based URL extraction using Gemini Vision",
+    "Heuristic classifier for detecting social engineering patterns and dangerous file extensions",
+    "Role-based access control with three user types: Employee, Analyst, and Administrator",
+    "Incident lifecycle management with status tracking (pending → investigating → resolved)",
+    "24-hour result caching with 65% reduction in API calls for repeated queries",
+    "PDF and CSV export of incident reports",
+    "Docker-ready deployment with Render.com cloud support",
+    "Zero monthly cost operating entirely on free API tiers"
+  ],
+  "publicApiSurface": [
+    "POST /api/auth/token/ — Obtain JWT authentication token",
+    "POST /api/incidents/analyze-file-preview/ — Analyze a suspicious file",
+    "POST /api/incidents/analyze-url-preview/ — Analyze a suspicious URL",
+    "POST /api/incidents/analyze-image-preview/ — Analyze a screenshot for phishing",
+    "POST /api/incidents/create/ — Create an incident from analysis results",
+    "GET /api/incidents/list/ — List incidents (filtered by role)",
+    "GET /api/incidents/<id>/ — Get incident details",
+    "PATCH /api/incidents/<id>/update-status/ — Update incident status",
+    "GET /api/incidents/<id>/notes/ — Get analyst notes for an incident",
+    "POST /api/incidents/<id>/notes/ — Add an analyst note",
+    "GET /api/incidents/<id>/analysis-details/ — Get full analysis breakdown",
+    "GET /api/incidents/<id>/pdf/ — Generate PDF report",
+    "GET /api/incidents/export/csv/ — Export incidents as CSV",
+    "GET /api/incidents/stats/ — Get dashboard statistics",
+    "GET /api/users/list/ — List users (admin only)",
+    "PATCH /api/users/<id>/toggle_status/ — Activate/deactivate a user account",
+    "PATCH /api/users/<id>/change_role/ — Change user role",
+    "GET /api/users/login-attempts/ — View login audit log",
+    "GET /api/health/ — Health check endpoint"
+  ]
+}
